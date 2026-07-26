@@ -1,0 +1,44 @@
+# Frontend Dockerfile
+# Multi-stage build for optimized production image
+
+# Stage 1: Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies
+COPY frontend/package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY frontend/ ./
+
+# Build application
+RUN npm run build
+
+# Stage 2: Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install production dependencies only
+COPY frontend/package*.json ./
+RUN npm ci --omit=dev
+
+# Copy built application from builder stage
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+USER nextjs
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1
+
+# Start application
+CMD ["npm", "start"]
