@@ -15,6 +15,10 @@ from app.core.config import settings
 
 # Prepare async database URL (use asyncpg for PostgreSQL if not already set)
 def _build_async_database_url(url: str) -> str:
+    if url.startswith("sqlite+"):
+        return url
+    if url.startswith("sqlite://"):
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
     if url.startswith("postgresql+"):
         return url
     if url.startswith("postgresql://"):

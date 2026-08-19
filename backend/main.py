@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZIPMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.core.config import settings
 from app.core.logger import setup_logging
@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
     )
 
     # Compression Middleware
-    app.add_middleware(GZIPMiddleware, minimum_size=1000)
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     # Health check endpoint
     @app.get("/api/health")
@@ -75,9 +75,9 @@ def create_app() -> FastAPI:
         """Root endpoint"""
         return {"message": "CodeForge AI API", "version": "0.1.0"}
 
-    # TODO: Include routers
-    # from app.api.v1 import router as v1_router
-    # app.include_router(v1_router, prefix="/api/v1")
+    from app.api.v1 import router as v1_router
+
+    app.include_router(v1_router, prefix="/api/v1")
 
     return app
 

@@ -1,10 +1,6 @@
-import type { NextConfig } from 'next';
-
-const nextConfig: NextConfig = {
-  // React strict mode for development
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   reactStrictMode: true,
-
-  // Image optimization
   images: {
     remotePatterns: [
       {
@@ -13,8 +9,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-
-  // Headers for security
   async headers() {
     return [
       {
@@ -36,14 +30,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-
-  // Environment variables
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000',
   },
-
-  // Experimental features
   experimental: {
     optimizePackageImports: ['@tanstack/react-query'],
   },

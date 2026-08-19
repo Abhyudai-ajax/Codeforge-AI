@@ -43,6 +43,7 @@ _TestSessionLocal = async_sessionmaker(
 async def create_tables():
     """Create all ORM tables at the start of the test session."""
     # Import models so metadata is populated before create_all.
+    import app.models.project  # noqa: F401
     import app.models.user  # noqa: F401
 
     async with _test_engine.begin() as conn:

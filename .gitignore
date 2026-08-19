@@ -107,6 +107,10 @@ Thumbs.db
 *.bak
 *.tmp
 *.temp
+*.db
+pytest_output.txt
+structure.txt
+backend/structure.txt
 
 # ============================================================
 # ENVIRONMENT VARIABLES

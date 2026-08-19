@@ -14,8 +14,10 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.dependencies.auth import get_current_active_user
+from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
-from app.schemas.user import RegisterRequest, RegisterResponse
+from app.schemas.user import RegisterRequest, RegisterResponse, UserResponse
 from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,19 @@ async def login(
     return tokens
 
 
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get current authenticated user",
+    description="Return the authenticated user's profile details.",
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_active_user),
+) -> UserResponse:
+    """Return the authenticated user's public profile."""
+    return UserResponse.model_validate(current_user)
+
+
 # ---------------------------------------------------------------------------
 # GitHub OAuth
 # ---------------------------------------------------------------------------
@@ -99,7 +114,7 @@ async def github_login(
 
     service = GitHubOAuthService(db)
     auth_url = service.get_authorization_url()
-    return RedirectResponse(url=auth_url)
+    return RedirectResponse(url=auth_url, status_code=302)
 
 
 @router.get(

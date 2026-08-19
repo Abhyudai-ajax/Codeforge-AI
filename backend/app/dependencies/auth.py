@@ -21,10 +21,14 @@ from app.services.auth_service import AuthService
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# OAuth2 scheme
+# OAuth2 schemes
 # ---------------------------------------------------------------------------
 # Points to the login URL so Swagger UI's "Authorize" button works correctly.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/login",
+    auto_error=False,
+)
 
 
 async def get_current_user(
@@ -64,6 +68,30 @@ async def get_current_user(
     return await service.get_user_by_id(sub)
 
 
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Optional authentication dependency for public endpoints."""
+    if not token:
+        return None
+
+    try:
+        payload = decode_token(token)
+    except HTTPException:
+        return None
+
+    sub: str | None = payload.get("sub")
+    if sub is None:
+        return None
+
+    service = AuthService(db)
+    try:
+        return await service.get_user_by_id(sub)
+    except HTTPException:
+        return None
+
+
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
@@ -98,7 +126,7 @@ def require_role(*allowed_roles: str):
         @router.get("/admin/users", dependencies=[Depends(require_role("admin"))])
 
     Args:
-        *allowed_roles: String role names allowed to access the endpoint (e.g. 'admin').
+        *allowed_roles: String role names allowed to access the endpoint.
     """
 
     async def _role_checker(

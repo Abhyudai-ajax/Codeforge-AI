@@ -70,6 +70,22 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
+    # AI Providers
+    AI_PROVIDER: str = "openai"
+    AI_TIMEOUT_SECONDS: int = 30
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama2"
+
+    # Security and middleware
+    TRUSTED_HOSTS: List[str] | str = ["localhost", "127.0.0.1", "testserver"]
+    HTTPS_REDIRECT: bool = False
+    RATE_LIMIT_ENABLED: bool = False
+    RATE_LIMIT_REQUESTS: int = 100
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
     # WebSocket
     WS_HEARTBEAT_INTERVAL: int = 30
 

@@ -6,6 +6,8 @@ database is required.  The ``client`` fixture provides an AsyncClient
 with the test DB injected via dependency override.
 """
 
+from typing import Any, cast
+
 import pytest
 from httpx import AsyncClient
 
@@ -30,11 +32,11 @@ LOGIN_PAYLOAD = {
 # ---------------------------------------------------------------------------
 
 
-async def _register_user(client: AsyncClient, payload: dict = REGISTER_PAYLOAD) -> dict:
+async def _register_user(client: AsyncClient, payload: dict[str, Any] = REGISTER_PAYLOAD) -> dict[str, Any]:
     """Register a user and assert success, returning the JSON body."""
     response = await client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 201, response.text
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
 # ---------------------------------------------------------------------------

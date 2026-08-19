@@ -7,11 +7,11 @@ profile fetching, and user account creation/linking logic.
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from fastapi import HTTPException, status
-from jose import JWTError, jwt
+from jose import JWTError, jwt  # type: ignore[import]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -38,9 +38,12 @@ class GitHubOAuthService:
         """Generate a signed JWT state token containing a random nonce."""
         nonce = secrets.token_hex(16)
         expire = datetime.now(tz=timezone.utc) + timedelta(minutes=10)
-        state_str: str = jwt.encode(
-            payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-        )
+        payload = {
+            "type": "oauth_state",
+            "nonce": nonce,
+            "exp": int(expire.timestamp()),
+        }
+        state_str: str = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return state_str
 
     @staticmethod
@@ -127,7 +130,7 @@ class GitHubOAuthService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Failed to fetch GitHub user profile.",
                 )
-            user_data = user_resp.json()
+            user_data = cast(dict[str, Any], user_resp.json())
 
             email = user_data.get("email")
             if not email:

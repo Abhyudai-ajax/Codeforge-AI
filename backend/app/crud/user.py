@@ -1,15 +1,18 @@
 """
 User CRUD Repository
+
 Implements the repository pattern for async database access.
 
-All database operations are encapsulated here.  Service-layer code must
-never construct raw SQL or call the session directly — use this class.
+All database operations for the User model are encapsulated here.
+Service-layer code should never interact with AsyncSession directly.
 """
+
+from __future__ import annotations
 
 import logging
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,106 +22,68 @@ logger = logging.getLogger(__name__)
 
 
 class UserCRUD:
-    """
-    Async CRUD operations for the :class:`~app.models.user.User` model.
-
-    Each method is stateless with respect to the session — the session is
-    injected at instantiation so the class is easily unit-testable with a
-    mock session.
-
-    Args:
-        session: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
-    """
+    """Repository providing async CRUD operations for User."""
 
     def __init__(self, session: AsyncSession) -> None:
-        """Initialise the repository with an injected async session."""
         self._session = session
 
-    # ------------------------------------------------------------------
-    # Read operations
-    # ------------------------------------------------------------------
+    # ==========================================================
+    # Internal Helpers
+    # ==========================================================
 
-    async def get_by_email(self, email: str) -> User | None:
-        """
-        Return the user whose email matches ``email``, or ``None``.
+    async def _commit(self, user: User) -> User:
+        """Commit transaction and refresh instance."""
 
-        Args:
-            email: Email address to look up (case-sensitive).
+        try:
+            await self._session.commit()
+            await self._session.refresh(user)
+            return user
 
-        Returns:
-            :class:`~app.models.user.User` or ``None``.
-        """
-        stmt = select(User).where(User.email == email)
-        result = await self._session.execute(stmt)
-        user = result.scalar_one_or_none()
-        logger.debug("get_by_email(%r) -> %s", email, user)
-        return user
+        except IntegrityError:
+            await self._session.rollback()
+            logger.exception("Database integrity error.")
+            raise
 
-    async def get_by_username(self, username: str) -> User | None:
-        """
-        Return the user whose username matches ``username``, or ``None``.
-
-        Args:
-            username: Username to look up (case-sensitive).
-
-        Returns:
-            :class:`~app.models.user.User` or ``None``.
-        """
-        stmt = select(User).where(User.username == username)
-        result = await self._session.execute(stmt)
-        user = result.scalar_one_or_none()
-        logger.debug("get_by_username(%r) -> %s", username, user)
-        return user
+    # ==========================================================
+    # Read Operations
+    # ==========================================================
 
     async def get_by_id(self, user_id: uuid.UUID) -> User | None:
-        """
-        Return the user with primary key ``user_id``, or ``None``.
+        result = await self._session.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
 
-        Args:
-            user_id: UUID primary key.
+    async def get_by_email(self, email: str) -> User | None:
+        result = await self._session.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
 
-        Returns:
-            :class:`~app.models.user.User` or ``None``.
-        """
-        stmt = select(User).where(User.id == user_id)
-        result = await self._session.execute(stmt)
-        user = result.scalar_one_or_none()
-        logger.debug("get_by_id(%s) -> %s", user_id, user)
-        return user
+    async def get_by_username(self, username: str) -> User | None:
+        result = await self._session.execute(select(User).where(User.username == username))
+        return result.scalar_one_or_none()
 
     async def get_by_github_id(self, github_id: str) -> User | None:
-        """Return the user whose GitHub ID matches ``github_id``, or ``None``."""
-        stmt = select(User).where(User.github_id == github_id)
-        result = await self._session.execute(stmt)
-        user = result.scalar_one_or_none()
-        logger.debug("get_by_github_id(%r) -> %s", github_id, user)
-        return user
+        result = await self._session.execute(select(User).where(User.github_id == github_id))
+        return result.scalar_one_or_none()
 
-    async def list_users(self, skip: int = 0, limit: int = 50) -> tuple[list[User], int]:
-        """
-        List users with offset pagination and return (items, total_count).
+    async def list_users(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[User], int]:
+        """Return paginated users."""
 
-        Args:
-            skip: Number of records to skip.
-            limit: Maximum records to return.
+        total_result = await self._session.execute(select(func.count()).select_from(User))
 
-        Returns:
-            Tuple of (list of users, total count).
-        """
-        from sqlalchemy import func
+        total = total_result.scalar_one()
 
-        count_stmt = select(func.count()).select_from(User)
-        total_res = await self._session.execute(count_stmt)
-        total = total_res.scalar() or 0
+        result = await self._session.execute(
+            select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
+        )
 
-        stmt = select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
-        result = await self._session.execute(stmt)
-        users = list(result.scalars().all())
-        return users, total
+        return list(result.scalars().all()), total
 
-    # ------------------------------------------------------------------
-    # Write operations
-    # ------------------------------------------------------------------
+    # ==========================================================
+    # Create Operations
+    # ==========================================================
 
     async def create(
         self,
@@ -128,7 +93,7 @@ class UserCRUD:
         hashed_password: str,
         full_name: str | None = None,
     ) -> User:
-        """Persist a new user to the database."""
+
         user = User(
             username=username,
             email=email,
@@ -138,14 +103,13 @@ class UserCRUD:
             is_active=True,
             is_verified=False,
         )
+
         self._session.add(user)
-        try:
-            await self._session.commit()
-            await self._session.refresh(user)
-        except IntegrityError:
-            await self._session.rollback()
-            raise
-        logger.info("User created: id=%s email=%s", user.id, user.email)
+
+        user = await self._commit(user)
+
+        logger.info("Created user %s", user.email)
+
         return user
 
     async def create_oauth_user(
@@ -158,55 +122,113 @@ class UserCRUD:
         full_name: str | None = None,
         avatar_url: str | None = None,
     ) -> User:
-        """Persist a new GitHub OAuth user (passwordless, verified)."""
+
         user = User(
             username=username,
             email=email,
             hashed_password=None,
-            full_name=full_name,
-            avatar_url=avatar_url,
             github_id=github_id,
             github_username=github_username,
+            full_name=full_name,
+            avatar_url=avatar_url,
             role=UserRole.USER,
             is_active=True,
             is_verified=True,
         )
+
         self._session.add(user)
-        try:
-            await self._session.commit()
-            await self._session.refresh(user)
-        except IntegrityError:
-            await self._session.rollback()
-            raise
-        logger.info("OAuth user created: id=%s github_id=%s", user.id, github_id)
+
+        user = await self._commit(user)
+
+        logger.info("Created GitHub user %s", user.email)
+
         return user
 
-    async def update(self, user: User, **kwargs: object) -> User:
-        """
-        Update fields on an existing User instance and commit.
+    # ==========================================================
+    # Update Operations
+    # ==========================================================
 
-        Args:
-            user: The User ORM object to mutate.
-            **kwargs: Field-value pairs to set.
+    async def update(
+        self,
+        user: User,
+        **kwargs: object,
+    ) -> User:
 
-        Returns:
-            The refreshed User ORM instance.
-        """
+        allowed_fields = {
+            "username",
+            "email",
+            "hashed_password",
+            "full_name",
+            "avatar_url",
+            "bio",
+            "github_username",
+            "github_id",
+            "role",
+            "is_active",
+            "is_verified",
+        }
+
         for key, value in kwargs.items():
-            if value is not None or key in (
-                "full_name",
-                "avatar_url",
-                "bio",
-                "github_id",
-                "github_username",
-            ):
+            if key in allowed_fields:
                 setattr(user, key, value)
+
         self._session.add(user)
-        try:
-            await self._session.commit()
-            await self._session.refresh(user)
-        except IntegrityError:
-            await self._session.rollback()
-            raise
-        logger.info("User updated: id=%s", user.id)
+
+        user = await self._commit(user)
+
+        logger.info("Updated user %s", user.id)
+
         return user
+
+    async def activate(self, user: User) -> User:
+        user.is_active = True
+
+        self._session.add(user)
+
+        user = await self._commit(user)
+
+        logger.info("Activated user %s", user.id)
+
+        return user
+
+    async def deactivate(self, user: User) -> User:
+        user.is_active = False
+
+        self._session.add(user)
+
+        user = await self._commit(user)
+
+        logger.info("Deactivated user %s", user.id)
+
+        return user
+
+    async def verify(self, user: User) -> User:
+        user.is_verified = True
+
+        self._session.add(user)
+
+        user = await self._commit(user)
+
+        logger.info("Verified user %s", user.id)
+
+        return user
+
+    # ==========================================================
+    # Delete Operations
+    # ==========================================================
+
+    async def delete(self, user: User) -> None:
+        await self._session.delete(user)
+        await self._session.commit()
+
+        logger.info("Deleted user %s", user.id)
+
+    # ==========================================================
+    # Utility Operations
+    # ==========================================================
+
+    async def exists_email(self, email: str) -> bool:
+        return await self.get_by_email(email) is not None
+
+    async def exists_username(self, username: str) -> bool:
+        return await self.get_by_username(username) is not None
