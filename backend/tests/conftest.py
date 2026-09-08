@@ -2,7 +2,7 @@
 Pytest shared fixtures for the CodeForge AI backend test suite.
 
 Uses an in-memory SQLite database (via aiosqlite) so tests run without
-a live PostgreSQL instance.  The ``get_db`` FastAPI dependency is
+a live PostgreSQL instance. The ``get_db`` FastAPI dependency is
 overridden per-test to inject a fresh session backed by that database.
 """
 
@@ -10,7 +10,11 @@ from typing import AsyncGenerator
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
@@ -43,8 +47,7 @@ _TestSessionLocal = async_sessionmaker(
 async def create_tables():
     """Create all ORM tables at the start of the test session."""
     # Import models so metadata is populated before create_all.
-    import app.models.project  # noqa: F401
-    import app.models.user  # noqa: F401
+    import app.models  # noqa: F401
 
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -68,23 +71,16 @@ async def clean_tables():
 
 @pytest_asyncio.fixture()
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Yield a fresh async session for each test.
-
-    Wraps every test in a savepoint that is rolled back afterwards so
-    tests remain isolated without recreating the schema.
-    """
+    """Yield a fresh async session for each test."""
     async with _TestSessionLocal() as session:
         yield session
 
 
 @pytest_asyncio.fixture()
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """
-    Yield an ``AsyncClient`` wired to the FastAPI app with the test DB.
-
-    The ``get_db`` dependency is overridden to use the per-test session.
-    """
+async def client(
+    db_session: AsyncSession,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Yield an ``AsyncClient`` wired to the FastAPI app with test DB."""
 
     async def _override_get_db():
         yield db_session

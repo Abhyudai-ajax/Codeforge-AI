@@ -1,4 +1,7 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-npx lint-staged --config frontend/.lintstagedrc.json
+# lint-staged resolves eslint/prettier from the nearest node_modules/.bin,
+# which only exists under frontend/ (there's no root package.json). Git
+# always runs hooks with cwd at the repo root, so cd there explicitly.
+cd "$(dirname "$0")/.." && npx lint-staged

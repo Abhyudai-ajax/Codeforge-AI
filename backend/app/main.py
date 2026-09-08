@@ -8,7 +8,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import settings
 from app.core.logger import setup_logging
@@ -16,6 +18,41 @@ from app.core.logger import setup_logging
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+class UnhandledExceptionMiddleware:
+    """Turns an unhandled exception into a normal 500 JSON response.
+
+    Starlette's own catch-all (``ServerErrorMiddleware``) is always the
+    outermost layer, wrapping every other middleware including
+    ``CORSMiddleware`` — so its bare 500 response never passes back through
+    CORS's response-header injection, and a real backend bug on a
+    cross-origin request looks like a blocked CORS request in the browser,
+    hiding the actual error. Registering ``@app.exception_handler(Exception)``
+    does not help either: Starlette special-cases a handler for the base
+    ``Exception`` (or status 500) by attaching it to that same outer
+    ``ServerErrorMiddleware`` rather than the inner ``ExceptionMiddleware``.
+    A plain ASGI middleware placed *inside* ``CORSMiddleware`` (added to the
+    app before it) is what's needed: it catches the exception itself and
+    sends the response through the same ``send`` CORSMiddleware already
+    wrapped, so CORS headers apply like any other response.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            logger.exception(
+                "Unhandled exception for %s %s", scope.get("method"), scope.get("path")
+            )
+            response = JSONResponse(status_code=500, content={"detail": "Internal server error."})
+            await response(scope, receive, send)
 
 
 @asynccontextmanager
@@ -48,6 +85,12 @@ def create_app() -> FastAPI:
         openapi_url=("/api/openapi.json" if is_dev else None),
         lifespan=lifespan,
     )
+
+    # Added before CORSMiddleware so it ends up *inside* it (Starlette wraps
+    # middleware in reverse add-order): its 500 responses still get CORS
+    # headers. See UnhandledExceptionMiddleware's docstring for why the more
+    # obvious `@app.exception_handler(Exception)` does not achieve this.
+    app.add_middleware(UnhandledExceptionMiddleware)
 
     # CORS Configuration
     app.add_middleware(

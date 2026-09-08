@@ -1,13 +1,25 @@
-"""Problem and Submission models definition using SQLAlchemy 2.0 declarative style."""
+"""DSA problems, immutable test cases, submissions, and user progress."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+)
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import (
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON as GenericJSON
@@ -15,24 +27,22 @@ from sqlalchemy.types import JSON as GenericJSON
 from app.core.database import Base
 
 
-
 class ProblemDifficulty(str, Enum):
-    """Problem difficulty levels."""
-
-    EASY = "Easy"
-    MEDIUM = "Medium"
-    HARD = "Hard"
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
 
 
 class SubmissionStatus(str, Enum):
-    """Status of a code submission."""
-
-    ACCEPTED = "Accepted"
-    WRONG_ANSWER = "Wrong Answer"
-    TIME_LIMIT_EXCEEDED = "Time Limit Exceeded"
-    RUNTIME_ERROR = "Runtime Error"
-    COMPILE_ERROR = "Compile Error"
-    PENDING = "Pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    ACCEPTED = "accepted"
+    WRONG_ANSWER = "wrong_answer"
+    COMPILATION_ERROR = "compilation_error"
+    RUNTIME_ERROR = "runtime_error"
+    TIME_LIMIT_EXCEEDED = "time_limit_exceeded"
+    MEMORY_LIMIT_EXCEEDED = "memory_limit_exceeded"
+    FAILED = "failed"
 
 
 class Problem(Base):
@@ -59,42 +69,20 @@ class Problem(Base):
         index=True,
     )
 
-    difficulty: Mapped[str] = mapped_column(
-        String(20),
-        default=ProblemDifficulty.EASY.value,
-        nullable=False,
-        index=True,
-    )
-
-    category: Mapped[str] = mapped_column(
-        String(50),
-        default="Arrays",
-        nullable=False,
-        index=True,
-    )
+    difficulty: Mapped[ProblemDifficulty] = mapped_column(SQLEnum(ProblemDifficulty), index=True)
 
     description_md: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
 
-    starter_code: Mapped[Dict[str, str]] = mapped_column(
-        GenericJSON,
-        default=dict,
-        nullable=False,
-    )
-
-    test_cases: Mapped[List[Dict[str, Any]]] = mapped_column(
-        GenericJSON,
-        default=list,
-        nullable=False,
-    )
-
-    constraints: Mapped[List[str]] = mapped_column(
-        GenericJSON,
-        default=list,
-        nullable=False,
-    )
+    input_description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    output_description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    starter_code: Mapped[dict[str, str]] = mapped_column(GenericJSON, default=dict)
+    constraints: Mapped[list[str]] = mapped_column(GenericJSON, default=list)
+    examples: Mapped[list[dict]] = mapped_column(GenericJSON, default=list)
+    supported_languages: Mapped[list[str]] = mapped_column(GenericJSON, default=lambda: ["python"])
+    editorial_md: Mapped[str | None] = mapped_column(Text)
 
     time_limit_ms: Mapped[int] = mapped_column(
         Integer,
@@ -108,13 +96,14 @@ class Problem(Base):
         nullable=False,
     )
 
-    acceptance_rate: Mapped[float] = mapped_column(
-        Float,
-        default=65.0,
-        nullable=False,
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    test_cases: Mapped[list["TestCase"]] = relationship(
+        "TestCase", back_populates="problem", cascade="all, delete-orphan", lazy="selectin"
     )
-
-    submissions: Mapped[List["Submission"]] = relationship(
+    tags: Mapped[list["ProblemTag"]] = relationship(
+        secondary="problem_tag_links", back_populates="problems", lazy="selectin"
+    )
+    submissions: Mapped[list["Submission"]] = relationship(
         "Submission",
         back_populates="problem",
         cascade="all, delete-orphan",
@@ -132,6 +121,40 @@ class Problem(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class TestCase(Base):
+    __test__ = False
+    __tablename__ = "test_cases"
+    __table_args__ = (Index("ix_test_cases_problem_public", "problem_id", "is_public"),)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    problem_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("problems.id", ondelete="CASCADE")
+    )
+    input_data: Mapped[str] = mapped_column(Text)
+    expected_output: Mapped[str] = mapped_column(Text)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    problem: Mapped[Problem] = relationship(back_populates="test_cases")
+
+
+class ProblemTag(Base):
+    __tablename__ = "problem_tags"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    problems: Mapped[list[Problem]] = relationship(
+        secondary="problem_tag_links", back_populates="tags"
+    )
+
+
+class ProblemTagLink(Base):
+    __tablename__ = "problem_tag_links"
+    problem_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("problem_tags.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -165,54 +188,44 @@ class Submission(Base):
         back_populates="submissions",
     )
 
-    language: Mapped[str] = mapped_column(
-        String(30),
-        default="python",
-        nullable=False,
-    )
+    user = relationship("User", back_populates="submissions")
 
-    code: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
+    room_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("coding_rooms.id", ondelete="SET NULL")
     )
-
-    status: Mapped[str] = mapped_column(
-        String(30),
-        default=SubmissionStatus.PENDING.value,
-        nullable=False,
+    language: Mapped[str] = mapped_column(String(30))
+    source_code: Mapped[str] = mapped_column(Text)
+    status: Mapped[SubmissionStatus] = mapped_column(
+        SQLEnum(SubmissionStatus), default=SubmissionStatus.QUEUED, index=True
     )
-
-    passed_test_cases: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-
-    total_test_cases: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-
-    runtime_ms: Mapped[float] = mapped_column(
-        Float,
-        default=0.0,
-        nullable=False,
-    )
-
-    memory_mb: Mapped[float] = mapped_column(
-        Float,
-        default=0.0,
-        nullable=False,
-    )
-
-    error_message: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    runtime_ms: Mapped[int | None] = mapped_column(Integer)
+    memory_kb: Mapped[int | None] = mapped_column(Integer)
+    passed_test_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_test_count: Mapped[int] = mapped_column(Integer, default=0)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    output: Mapped[str] = mapped_column(Text, default="", server_default="")
+    error_output: Mapped[str] = mapped_column(Text, default="", server_default="")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserProblemProgress(Base):
+    __tablename__ = "user_problem_progress"
+    __table_args__ = (UniqueConstraint("user_id", "problem_id", name="uq_user_problem_progress"),)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    problem_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("problems.id", ondelete="CASCADE"), index=True
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    accepted_submissions: Mapped[int] = mapped_column(Integer, default=0)
+    failed_submissions: Mapped[int] = mapped_column(Integer, default=0)
+    first_solved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

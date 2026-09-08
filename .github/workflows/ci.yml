@@ -149,6 +149,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # pytest itself runs against an in-memory SQLite database (see
+      # tests/conftest.py), so it never proves the Alembic migration chain or
+      # the seeder against a real PostgreSQL. These two steps do, against the
+      # `postgres` service above.
+      - name: Apply Alembic migrations to PostgreSQL
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+        run: alembic -c alembic/alembic.ini upgrade head
+
+      - name: Seed the DSA catalog into PostgreSQL
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+        run: python -m app.db.seed_data
+
       - name: Run tests with coverage
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
@@ -162,34 +176,3 @@ jobs:
           files: ./backend/coverage.xml
           flags: backend
           name: backend-coverage
-
-  # Docker Build (optional - for main branch only)
-  docker-build:
-    name: Docker - Build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: [frontend-build, backend-test]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.frontend
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.backend
-          push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

@@ -7,6 +7,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,7 +15,9 @@ from app.dependencies.auth import (
     get_current_active_user,
     get_current_user_optional,
 )
+from app.models.project_file import ProjectFile
 from app.models.user import User
+from app.schemas.execution import ExecutionCreate, ExecutionResponse
 from app.schemas.project import (
     MessageResponse,
     ProjectCreate,
@@ -22,6 +25,8 @@ from app.schemas.project import (
     ProjectResponse,
     ProjectUpdate,
 )
+from app.schemas.project_file import ProjectFileCreate, ProjectFileResponse, ProjectFileUpdate
+from app.services.execution_service import ExecutionService
 from app.services.project_service import ProjectService
 
 logger = logging.getLogger(__name__)
@@ -188,11 +193,6 @@ async def restore_project(
 # Project Workspace & Files (VSCode IDE Integration)
 # ============================================================================
 
-from app.models.project_file import ProjectFile
-from app.schemas.project_file import ProjectFileCreate, ProjectFileResponse, ProjectFileUpdate
-from app.services.code_runner import CodeRunner
-from sqlalchemy import select
-
 
 @router.get(
     "/{project_id}/files",
@@ -201,9 +201,15 @@ from sqlalchemy import select
 )
 async def list_project_files(
     project_id: uuid.UUID,
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProjectFileResponse]:
-    stmt = select(ProjectFile).where(ProjectFile.project_id == project_id).order_by(ProjectFile.path.asc())
+    await ProjectService(db).get_project(project_id, current_user)
+    stmt = (
+        select(ProjectFile)
+        .where(ProjectFile.project_id == project_id)
+        .order_by(ProjectFile.path.asc())
+    )
     res = await db.execute(stmt)
     files = res.scalars().all()
     return [ProjectFileResponse.model_validate(f) for f in files]
@@ -218,8 +224,14 @@ async def list_project_files(
 async def create_project_file(
     project_id: uuid.UUID,
     payload: ProjectFileCreate,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectFileResponse:
+    project = await ProjectService(db).get_project(project_id, current_user)
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Project owner access is required."
+        )
     file_obj = ProjectFile(
         project_id=project_id,
         path=payload.path,
@@ -243,9 +255,17 @@ async def update_project_file(
     project_id: uuid.UUID,
     file_id: uuid.UUID,
     payload: ProjectFileUpdate,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectFileResponse:
-    stmt = select(ProjectFile).where(ProjectFile.id == file_id, ProjectFile.project_id == project_id)
+    project = await ProjectService(db).get_project(project_id, current_user)
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Project owner access is required."
+        )
+    stmt = select(ProjectFile).where(
+        ProjectFile.id == file_id, ProjectFile.project_id == project_id
+    )
     res = await db.execute(stmt)
     file_obj = res.scalar_one_or_none()
     if not file_obj:
@@ -270,9 +290,17 @@ async def update_project_file(
 async def delete_project_file(
     project_id: uuid.UUID,
     file_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    stmt = select(ProjectFile).where(ProjectFile.id == file_id, ProjectFile.project_id == project_id)
+    project = await ProjectService(db).get_project(project_id, current_user)
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Project owner access is required."
+        )
+    stmt = select(ProjectFile).where(
+        ProjectFile.id == file_id, ProjectFile.project_id == project_id
+    )
     res = await db.execute(stmt)
     file_obj = res.scalar_one_or_none()
     if file_obj:
@@ -283,14 +311,25 @@ async def delete_project_file(
 
 @router.post(
     "/{project_id}/run",
+    response_model=ExecutionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Execute project code file",
 )
 async def run_project_file(
     project_id: uuid.UUID,
-    payload: dict,
-) -> dict:
-    code = payload.get("code", "")
-    language = payload.get("language", "python")
-    exec_result = CodeRunner.execute(code, language, [{"input": "", "expected_output": ""}])
-    return exec_result
-
+    payload: ExecutionCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> ExecutionResponse:
+    project = await ProjectService(db).get_project(project_id, current_user)
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Project owner access is required."
+        )
+    if payload.project_id and payload.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project IDs differ."
+        )
+    return await ExecutionService(db).enqueue(
+        current_user, payload.model_copy(update={"project_id": project_id})
+    )

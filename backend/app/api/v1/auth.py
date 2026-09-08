@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.dependencies.auth import get_current_active_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RefreshTokenRequest, TokenResponse
 from app.schemas.user import RegisterRequest, RegisterResponse, UserResponse
 from app.services.auth_service import AuthService
 
@@ -79,6 +79,19 @@ async def login(
     tokens = await service.login(payload)
     logger.info("login endpoint: tokens issued")
     return tokens
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Rotate a refresh token",
+)
+async def refresh_tokens(
+    payload: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Issue a new access/refresh pair after validating the refresh token."""
+    return await AuthService(db).refresh(payload.refresh_token)
 
 
 @router.get(

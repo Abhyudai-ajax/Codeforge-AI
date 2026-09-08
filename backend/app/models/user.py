@@ -16,7 +16,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.coding_room import CodingRoom, RoomMembership
+    from app.models.problem import Submission
     from app.models.project import Project
+    from app.models.roadmap import UserRoadmapSelection
 
 
 class UserRole(str, Enum):
@@ -119,6 +122,25 @@ class User(Base):
     projects: Mapped[list["Project"]] = relationship(
         "Project",
         back_populates="owner",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    submissions: Mapped[list["Submission"]] = relationship(
+        "Submission",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    coding_rooms: Mapped[list["CodingRoom"]] = relationship("CodingRoom", back_populates="owner")
+    room_memberships: Mapped[list["RoomMembership"]] = relationship(
+        "RoomMembership", back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    roadmap_selections: Mapped[list["UserRoadmapSelection"]] = relationship(
+        "UserRoadmapSelection",
+        back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
     )

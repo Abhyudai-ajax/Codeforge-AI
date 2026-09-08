@@ -1,4 +1,4 @@
-.PHONY: help install dev test clean lint format type-check docker-build docker-up docker-down db-init db-migrate
+.PHONY: help install dev test clean lint format type-check db-init db-migrate
 
 # Color output
 BLUE := \033[0;34m
@@ -41,11 +41,8 @@ dev-frontend: ## Start frontend dev server (http://localhost:3000)
 dev-backend: ## Start backend dev server (http://localhost:8000)
 	cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-dev: ## Start all services (Docker Compose)
-	docker-compose up
-
-dev-stop: ## Stop all Docker services
-	docker-compose down
+dev: ## Start frontend and backend dev servers (run in separate terminals)
+	@echo "Run 'make dev-frontend' and 'make dev-backend' in separate terminals."
 
 # ============================================================
 # CODE QUALITY
@@ -106,28 +103,6 @@ db-upgrade: ## Apply Alembic migrations
 
 db-downgrade: ## Rollback last Alembic migration
 	cd backend && source venv/bin/activate && alembic downgrade -1
-
-# ============================================================
-# DOCKER
-# ============================================================
-
-docker-build: ## Build Docker images
-	docker-compose build
-
-docker-up: ## Start all Docker containers
-	docker-compose up -d postgres redis
-	@echo "$(GREEN)✓ Services started$(NC)"
-	@echo "  Postgres: localhost:5432"
-	@echo "  Redis: localhost:6379"
-
-docker-down: ## Stop and remove all Docker containers
-	docker-compose down
-
-docker-logs-backend: ## Show backend logs
-	docker-compose logs -f backend
-
-docker-logs-frontend: ## Show frontend logs
-	docker-compose logs -f frontend
 
 # ============================================================
 # UTILITIES

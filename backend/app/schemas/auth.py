@@ -33,3 +33,9 @@ class TokenResponse(BaseModel):
     refresh_token: str = Field(..., description="JWT refresh token")
     token_type: str = Field(default="bearer", description="Token scheme")
     expires_in: int = Field(..., description="Access token TTL in seconds")
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request a new access-token pair using a valid refresh token."""
+
+    refresh_token: str = Field(..., min_length=1)

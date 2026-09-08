@@ -5,23 +5,26 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #0B0F17;
+  --bg-primary: #0b0f17;
   --bg-secondary: #111827;
-  --bg-tertiary: #1F2937;
-  --bg-editor: #0D1117;
+  --bg-tertiary: #1f2937;
+  --bg-editor: #0d1117;
   --border-color: #374151;
-  --cyan-glow: #06B6D4;
-  --emerald-glow: #10B981;
+  --cyan-glow: #06b6d4;
+  --emerald-glow: #10b981;
 }
 
 body {
-  background-color: #0B0F17;
-  color: #F3F4F6;
+  background-color: #0b0f17;
+  color: #f3f4f6;
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
 }
 
-code, kbd, samp, pre {
+code,
+kbd,
+samp,
+pre {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
@@ -32,7 +35,7 @@ code, kbd, samp, pre {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0B0F17;
+  background: #0b0f17;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -41,7 +44,7 @@ code, kbd, samp, pre {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4B5563;
+  background: #4b5563;
 }
 
 /* Glassmorphism Effect */
@@ -73,7 +76,7 @@ code, kbd, samp, pre {
 
 /* Code Editor Selection & Syntax Styling */
 .code-editor-area {
-  caret-color: #06B6D4;
+  caret-color: #06b6d4;
 }
 
 .code-editor-area::selection {
@@ -82,16 +85,85 @@ code, kbd, samp, pre {
 
 /* Tab Active Highlight */
 .tab-active {
-  border-bottom: 2px solid #06B6D4;
-  color: #38BDF8;
+  border-bottom: 2px solid #06b6d4;
+  color: #38bdf8;
 }
 
 /* Pulse Animation */
 @keyframes pulse-subtle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .animate-pulse-subtle {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Minimal markdown styling for AI responses and problem statements */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  font-weight: 700;
+  color: #f3f4f6;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+}
+.markdown-body h1:first-child,
+.markdown-body h2:first-child,
+.markdown-body h3:first-child {
+  margin-top: 0;
+}
+.markdown-body p {
+  margin-bottom: 0.75em;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5em 0 0.75em 1.25em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li {
+  margin-bottom: 0.25em;
+}
+.markdown-body code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.markdown-body pre {
+  background: #0b0f17;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 0.75em;
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-body strong {
+  color: #e5e7eb;
+  font-weight: 600;
+}
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75em;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #1f2937;
+  padding: 0.4em 0.6em;
+  text-align: left;
 }

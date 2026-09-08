@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    decode_refresh_token,
     hash_password,
     verify_password,
 )
@@ -150,6 +151,25 @@ class AuthService:
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
+    async def refresh(self, refresh_token: str) -> TokenResponse:
+        """Validate a refresh token and rotate it into a new token pair."""
+        payload = decode_refresh_token(refresh_token)
+        subject = payload.get("sub")
+        if not isinstance(subject, str):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        user = await self.get_user_by_id(subject)
+        token_payload = {"sub": str(user.id), "email": user.email}
+        return TokenResponse(
+            access_token=create_access_token(token_payload),
+            refresh_token=create_refresh_token(token_payload),
             token_type="bearer",
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )

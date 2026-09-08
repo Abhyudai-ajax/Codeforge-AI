@@ -1,4 +1,96 @@
 'use client';
-import React from 'react';import {CheckCircle,AlertCircle} from 'lucide-react';import {StatusBadge,StatCard,Tabs} from './SharedComponents';import type {Submission} from '@/lib/codeforge/types';
-const submission:Submission={id:'sub_demo',problem_id:'32',user_id:'user_1',language:'Python 3',status:'ACCEPTED',runtime_ms:24,memory_mb:14.2,submitted_at:new Date().toISOString(),code:'class Solution:\n    def longestValidParentheses(self, s):\n        stack=[]\n        return 0',test_cases:[{id:1,input:'s = "(()"',expected_output:'2',actual_output:'2',status:'PASSED',runtime_ms:2},{id:2,input:'s = ")()())"',expected_output:'4',actual_output:'4',status:'PASSED',runtime_ms:3}]};
-export default function SubmissionResultsPage(){return <div className="grid min-h-full gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-5"><div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center"><CheckCircle size={54} className="mx-auto mb-3 text-emerald-400"/><StatusBadge status={submission.status}/><p className="mt-3 text-sm text-gray-500">Submitted {new Date(submission.submitted_at).toLocaleString()}</p></div><div className="grid grid-cols-3 gap-3"><StatCard label="Runtime" value={submission.runtime_ms} unit="ms" comparison="Beats 98% of users"/><StatCard label="Memory" value={submission.memory_mb.toFixed(1)} unit="MB"/><StatCard label="Language" value={submission.language}/></div><div className="rounded-lg border border-gray-800 bg-gray-900 p-5"><h3 className="mb-4 font-bold text-white">Test Case Results</h3>{submission.test_cases.map(t=><div key={t.id} className="mb-3 rounded-lg border border-gray-800 bg-gray-950 p-4"><div className="flex justify-between"><span className="text-sm text-white">Case {t.id}</span><span className="text-xs text-emerald-400">{t.status} • {t.runtime_ms}ms</span></div><pre className="mt-3 text-xs text-gray-400">Input: {t.input}\nExpected: {t.expected_output}\nActual: {t.actual_output}</pre></div>)}</div></section><aside className="rounded-lg border border-gray-800 bg-gray-900 p-5"><Tabs tabs={[{label:'Code',value:'code',content:<pre className="overflow-auto whitespace-pre-wrap text-sm leading-6 text-gray-300">{submission.code}</pre>},{label:'History',value:'history',content:<p className="text-sm text-gray-400">Submission history will appear here.</p>}]}/></aside></div>}
+
+import React from 'react';
+import Link from 'next/link';
+import { CheckCircle, AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
+import { StatCard, StatusBadge, Spinner } from './SharedComponents';
+import AIPanel from './AIPanel';
+import { useSubmissionPolling, useProblem } from '@/lib/api/hooks';
+
+const SubmissionResultsPage: React.FC<{ submissionId: string }> = ({ submissionId }) => {
+  const { data: submission, isLoading } = useSubmissionPolling(submissionId);
+  const { data: problem } = useProblem(submission?.problem_id);
+
+  if (isLoading || !submission) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#0B0F17]">
+        <Spinner size={28} />
+      </div>
+    );
+  }
+
+  const isAccepted = submission.status === 'accepted';
+  const isPending = !submission.completed_at;
+
+  return (
+    <div className="min-h-full bg-[#0B0F17] p-6">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <Link
+          href="/submissions"
+          className="flex w-fit items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-300"
+        >
+          <ArrowLeft size={13} /> Back to submissions
+        </Link>
+
+        <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-8 text-center">
+          <div className="mb-4 flex justify-center">
+            {isPending ? (
+              <div className="h-14 w-14 animate-spin rounded-full border-4 border-gray-700 border-t-cyan-500" />
+            ) : isAccepted ? (
+              <CheckCircle size={56} className="text-emerald-400" />
+            ) : (
+              <AlertCircle size={56} className="text-rose-400" />
+            )}
+          </div>
+          <StatusBadge status={submission.status} />
+          {problem && (
+            <p className="mt-3 text-sm text-gray-400">
+              for{' '}
+              <Link href={`/problems/${problem.id}`} className="text-cyan-400 hover:text-cyan-300">
+                {problem.title}
+              </Link>
+            </p>
+          )}
+          <p className="mt-1 text-xs text-gray-600">
+            Submitted {new Date(submission.created_at).toLocaleString()}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard
+            label="Runtime"
+            value={submission.runtime_ms ?? '—'}
+            unit={submission.runtime_ms != null ? 'ms' : ''}
+            color="emerald"
+          />
+          <StatCard
+            label="Tests passed"
+            value={`${submission.passed_test_count}/${submission.total_test_count}`}
+            color="cyan"
+          />
+          <StatCard label="Language" value={submission.language} color="amber" />
+        </div>
+
+        {submission.error_output && (
+          <div className="rounded-lg border border-rose-900/50 bg-rose-950/20 p-4">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-rose-500">
+              Error
+            </p>
+            <p className="font-mono text-sm text-rose-300">{submission.error_output}</p>
+          </div>
+        )}
+
+        {problem && !isAccepted && submission.completed_at && (
+          <div className="flex items-center gap-2 rounded-lg border border-cyan-800/40 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-300">
+            <Sparkles size={15} />
+            Ask the AI assistant below to review why this submission didn&apos;t pass.
+          </div>
+        )}
+
+        {problem && <AIPanel problemId={problem.id} code={''} language={submission.language} />}
+      </div>
+    </div>
+  );
+};
+
+export default SubmissionResultsPage;

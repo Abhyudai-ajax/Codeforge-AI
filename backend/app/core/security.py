@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
-from jose import JWTError, jwt  # type: ignore[import]
+from jose import JWTError, jwt
 
 from app.core.config import settings
 
@@ -135,3 +135,17 @@ def decode_token(token: str) -> dict[str, Any]:
             detail="Could not validate credentials.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+def decode_refresh_token(token: str) -> dict[str, Any]:
+    """Decode a JWT and ensure it is exclusively a refresh token."""
+    payload = decode_token(token)
+    if payload.get("type") != "refresh":
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload

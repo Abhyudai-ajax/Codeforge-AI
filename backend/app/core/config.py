@@ -3,7 +3,7 @@ Configuration Management
 Environment-based configuration using Pydantic Settings
 """
 
-from typing import ClassVar, List
+from typing import Any, ClassVar
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # CORS
-    CORS_ORIGINS: List[str] | str = [
+    CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:8000",
         "http://localhost:5173",
@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379"
+    # Local dev without Redis: run tasks synchronously, in-process, instead of
+    # publishing to a broker. Leave off wherever a real worker + broker exist.
+    CELERY_TASK_ALWAYS_EAGER: bool = False
 
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -80,7 +83,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama2"
 
     # Security and middleware
-    TRUSTED_HOSTS: List[str] | str = ["localhost", "127.0.0.1", "testserver"]
+    TRUSTED_HOSTS: list[str] = ["localhost", "127.0.0.1", "testserver"]
     HTTPS_REDIRECT: bool = False
     RATE_LIMIT_ENABLED: bool = False
     RATE_LIMIT_REQUESTS: int = 100
@@ -89,16 +92,33 @@ class Settings(BaseSettings):
     # WebSocket
     WS_HEARTBEAT_INTERVAL: int = 30
 
+    # Arbitrary user code must be delegated to an isolated runner service.
+    CODE_EXECUTION_ENABLED: bool = False
+
     # Load from .env file — tries project root first, then CWD as fallback.
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=("../.env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
+        enable_decoding=False,
         extra="ignore",
     )
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    def _parse_cors_origins(cls, v):
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _parse_debug(cls, value: Any) -> bool:
+        """Accept conventional deployment labels without weakening production defaults."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"development", "dev"}:
+                return True
+        return bool(value)
+
+    @field_validator("CORS_ORIGINS", "TRUSTED_HOSTS", mode="before")
+    @classmethod
+    def _parse_list(cls, v: Any) -> list[str]:
         """Accept several formats for CORS_ORIGINS:
 
         - JSON list like ["http://...", ...]
@@ -106,7 +126,7 @@ class Settings(BaseSettings):
         - Empty/None -> use defaults
         """
         if v is None:
-            return v
+            return []
         # if already a list, return as-is
         if isinstance(v, list):
             return v
@@ -114,7 +134,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             s = v.strip()
             if not s:
-                return None
+                return []
             try:
                 import json
 
@@ -124,9 +144,8 @@ class Settings(BaseSettings):
             except Exception:
                 pass
             # fallback: comma-separated
-            parts = [p.strip() for p in s.split(",") if p.strip()]
-            return parts
-        return v
+            return [p.strip() for p in s.split(",") if p.strip()]
+        return list(v)
 
 
 # Global settings instance

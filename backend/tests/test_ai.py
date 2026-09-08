@@ -3,8 +3,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from app.ai.schemas import AITextRequest
 from httpx import AsyncClient
+
+from app.ai.schemas import AITextRequest
 
 REGISTER_PAYLOAD = {
     "username": "aiuser",

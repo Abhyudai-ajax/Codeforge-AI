@@ -7,7 +7,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -17,10 +17,7 @@ class ProjectFile(Base):
 
     __tablename__ = "project_files"
 
-    __table_args__ = (
-        Index("ix_project_files_proj_path", "project_id", "path", unique=True),
-    )
-
+    __table_args__ = (Index("ix_project_files_proj_path", "project_id", "path", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -34,6 +31,8 @@ class ProjectFile(Base):
         nullable=False,
         index=True,
     )
+
+    project = relationship("Project", back_populates="files")
 
     path: Mapped[str] = mapped_column(
         String(500),

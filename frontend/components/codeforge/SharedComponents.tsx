@@ -1,11 +1,178 @@
 'use client';
+
 import React from 'react';
-import {Trophy,Star,CheckCircle,AlertCircle} from 'lucide-react';
-import type {Difficulty,SubmissionStatus,User} from '@/lib/codeforge/types';
-export const DifficultyBadge=({difficulty}:{difficulty:Difficulty})=><span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${difficulty==='EASY'?'bg-emerald-500/10 text-emerald-400':difficulty==='MEDIUM'?'bg-yellow-500/10 text-yellow-400':'bg-red-500/10 text-red-400'}`}>{difficulty}</span>;
-export const UserAvatar=({user,size='md'}:{user:User;size?:'sm'|'md'|'lg'})=>{const s=size==='sm'?'w-8 h-8 text-xs':size==='lg'?'w-14 h-14 text-lg':'w-10 h-10 text-sm';return <div className={`${s} rounded-full bg-blue-600/20 text-blue-300 flex items-center justify-center font-bold shrink-0`}>{user.avatar?<img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover"/>:user.name.slice(0,1).toUpperCase()}</div>};
-export const Button=({children,variant='primary',size='md',...p}:{children:React.ReactNode;variant?:'primary'|'secondary'|'success'|'danger';size?:'sm'|'md'|'lg'}&React.ButtonHTMLAttributes<HTMLButtonElement>)=><button {...p} className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition disabled:opacity-50 ${size==='sm'?'px-3 py-1.5 text-xs':size==='lg'?'px-5 py-3':'px-4 py-2 text-sm'} ${variant==='primary'?'bg-blue-600 hover:bg-blue-500 text-white':variant==='success'?'bg-emerald-600 hover:bg-emerald-500 text-white':variant==='danger'?'bg-red-600 hover:bg-red-500 text-white':'bg-gray-800 hover:bg-gray-700 text-gray-100'}`}>{children}</button>;
-export const StatusBadge=({status}:{status:SubmissionStatus})=><span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status==='ACCEPTED'?'bg-emerald-500/10 text-emerald-400':'bg-red-500/10 text-red-400'}`}>{status==='ACCEPTED'?<CheckCircle size={14}/>:<AlertCircle size={14}/>} {status.replaceAll('_',' ')}</span>;
-export const StatCard=({label,value,unit,comparison}:{label:string;value:React.ReactNode;unit?:string;comparison?:string})=><div className="rounded-lg border border-gray-800 bg-gray-900 p-4"><p className="text-xs uppercase tracking-wider text-gray-500">{label}</p><p className="mt-1 text-xl font-bold text-white">{value}{unit&&<span className="ml-1 text-sm text-gray-400">{unit}</span>}</p>{comparison&&<p className="mt-1 text-xs text-gray-500">{comparison}</p>}</div>;
-export const Tabs=({tabs,defaultTab}:{tabs:{label:string;value:string;content:React.ReactNode}[];defaultTab?:string})=>{const [active,setActive]=React.useState(defaultTab||tabs[0]?.value);const tab=tabs.find(x=>x.value===active)||tabs[0];return <div><div className="flex gap-1 border-b border-gray-800">{tabs.map(x=><button key={x.value} onClick={()=>setActive(x.value)} className={`px-4 py-3 text-sm font-medium ${active===x.value?'border-b-2 border-blue-500 text-white':'text-gray-500 hover:text-gray-300'}`}>{x.label}</button>)}</div><div className="pt-5">{tab?.content}</div></div>};
-export const RankBadge=({rank}:{rank:number})=><div className="flex items-center gap-1 text-gray-300">{rank<=3?<Trophy size={16}/>:<Star size={15}/>}<span className="font-bold">#{rank}</span></div>;
+import { difficultyColor, formatStatusLabel, statusColor } from '@/lib/api/derived';
+import type { Difficulty, SubmissionStatus } from '@/lib/api/types';
+
+export const DifficultyBadge: React.FC<{ difficulty: Difficulty | string; className?: string }> = ({
+  difficulty,
+  className = '',
+}) => (
+  <span
+    className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${difficultyColor(difficulty)} ${className}`}
+  >
+    {difficulty}
+  </span>
+);
+
+export const UserAvatar: React.FC<{
+  name: string;
+  avatarUrl?: string | null;
+  size?: 'sm' | 'md' | 'lg';
+}> = ({ name, avatarUrl, size = 'md' }) => {
+  const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-11 h-11 text-sm', lg: 'w-16 h-16 text-lg' };
+  const initials = name
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <div
+      className={`${sizeClasses[size]} flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-cyan-600 to-blue-700 font-bold text-white`}
+    >
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={avatarUrl} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        initials || '?'
+      )}
+    </div>
+  );
+};
+
+export const Button: React.FC<{
+  children: React.ReactNode;
+  variant?: 'primary' | 'secondary' | 'danger' | 'success';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  onClick?: () => void;
+  className?: string;
+  type?: 'button' | 'submit' | 'reset';
+}> = ({
+  children,
+  variant = 'primary',
+  size = 'md',
+  disabled = false,
+  onClick,
+  className = '',
+  type = 'button',
+}) => {
+  const baseClasses =
+    'font-medium rounded-lg transition-colors flex items-center gap-2 justify-center disabled:cursor-not-allowed';
+  const variantClasses = {
+    primary: 'bg-cyan-600 hover:bg-cyan-500 text-white disabled:bg-gray-800 disabled:text-gray-500',
+    secondary:
+      'bg-gray-800 hover:bg-gray-700 text-gray-200 disabled:bg-gray-900 disabled:text-gray-600',
+    danger: 'bg-rose-600 hover:bg-rose-500 text-white disabled:bg-gray-800',
+    success: 'bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-gray-800',
+  };
+  const sizeClasses = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-sm',
+    lg: 'px-5 py-2.5 text-base',
+  };
+
+  return (
+    <button
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+export const StatusBadge: React.FC<{ status: SubmissionStatus | string }> = ({ status }) => (
+  <span
+    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${statusColor(status)}`}
+  >
+    {formatStatusLabel(status)}
+  </span>
+);
+
+export const StatCard: React.FC<{
+  label: string;
+  value: string | number;
+  unit?: string;
+  comparison?: string;
+  color?: 'cyan' | 'emerald' | 'amber' | 'rose';
+}> = ({ label, value, unit, comparison, color = 'cyan' }) => {
+  const colorClasses = {
+    cyan: 'text-cyan-400',
+    emerald: 'text-emerald-400',
+    amber: 'text-amber-400',
+    rose: 'text-rose-400',
+  };
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</p>
+      <div className="flex items-baseline gap-2">
+        <span className={`text-2xl font-bold ${colorClasses[color]}`}>{value}</span>
+        {unit && <span className="text-sm text-gray-500">{unit}</span>}
+      </div>
+      {comparison && <p className={`mt-2 text-xs ${colorClasses[color]}`}>{comparison}</p>}
+    </div>
+  );
+};
+
+export const Tabs: React.FC<{
+  tabs: { label: string; value: string; content: React.ReactNode }[];
+  defaultTab?: string;
+  onChange?: (tab: string) => void;
+}> = ({ tabs, defaultTab = tabs[0]?.value, onChange }) => {
+  const [activeTab, setActiveTab] = React.useState(defaultTab);
+  const handleChange = (tab: string) => {
+    setActiveTab(tab);
+    onChange?.(tab);
+  };
+  return (
+    <div className="w-full">
+      <div className="mb-6 flex gap-4 border-b border-gray-800">
+        {tabs.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => handleChange(tab.value)}
+            className={`border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === tab.value
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div>{tabs.find((tab) => tab.value === activeTab)?.content}</div>
+    </div>
+  );
+};
+
+export const EmptyState: React.FC<{
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}> = ({ title, description, action }) => (
+  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-800 py-12 text-center">
+    <p className="text-sm font-medium text-gray-300">{title}</p>
+    {description && <p className="mt-1 max-w-sm text-xs text-gray-500">{description}</p>}
+    {action && <div className="mt-4">{action}</div>}
+  </div>
+);
+
+export const RankBadge: React.FC<{ rank: number }> = ({ rank }) => {
+  const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  if (!medals[rank]) return <span className="font-mono text-sm text-gray-500">#{rank}</span>;
+  return <span className="text-xl">{medals[rank]}</span>;
+};
+
+export const Spinner: React.FC<{ size?: number }> = ({ size = 20 }) => (
+  <div
+    className="animate-spin rounded-full border-2 border-gray-700 border-t-cyan-500"
+    style={{ width: size, height: size }}
+  />
+);

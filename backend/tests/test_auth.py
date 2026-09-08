@@ -32,7 +32,9 @@ LOGIN_PAYLOAD = {
 # ---------------------------------------------------------------------------
 
 
-async def _register_user(client: AsyncClient, payload: dict[str, Any] = REGISTER_PAYLOAD) -> dict[str, Any]:
+async def _register_user(
+    client: AsyncClient, payload: dict[str, Any] = REGISTER_PAYLOAD
+) -> dict[str, Any]:
     """Register a user and assert success, returning the JSON body."""
     response = await client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 201, response.text

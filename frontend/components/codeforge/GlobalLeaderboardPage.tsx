@@ -1,4 +1,172 @@
 'use client';
-import React,{useMemo,useState} from 'react';import {Search,Globe} from 'lucide-react';import {RankBadge,UserAvatar,Tabs} from './SharedComponents';import type {LeaderboardEntry} from '@/lib/codeforge/types';
-const seed:LeaderboardEntry[]=[{rank:1,user:{id:'1',name:'Alex Murphy',username:'murphy_dev',rank:1,solved:1894,points:32100,acceptance:78.5,rating:2450},solved:1894,points:32100,acceptance:78.5,rating:2450,badge:'Grandmaster'},{rank:2,user:{id:'2',name:'Sarah Jenkins',username:'sarah_code',rank:2,solved:1482,points:24800,acceptance:76.2,rating:2180},solved:1482,points:24800,acceptance:76.2,rating:2180},{rank:3,user:{id:'3',name:'David Chen',username:'dchen',rank:3,solved:1390,points:23100,acceptance:74.1,rating:2110},solved:1390,points:23100,acceptance:74.1,rating:2110}];
-export default function GlobalLeaderboardPage(){const [q,setQ]=useState('');const [time,setTime]=useState('Overall');const rows=useMemo(()=>seed.filter(x=>`${x.user.name} ${x.user.username}`.toLowerCase().includes(q.toLowerCase())),[q]);const table=<div className="overflow-hidden rounded-lg border border-gray-800"><div className="grid grid-cols-[70px_1fr_100px_110px_100px] gap-3 bg-gray-900 px-5 py-3 text-xs uppercase tracking-wider text-gray-500"><span>Rank</span><span>User</span><span>Solved</span><span>Points</span><span>Rating</span></div>{rows.map(x=><div key={x.rank} className="grid grid-cols-[70px_1fr_100px_110px_100px] items-center gap-3 border-t border-gray-800 bg-gray-950 px-5 py-4"><RankBadge rank={x.rank}/><div className="flex items-center gap-3"><UserAvatar user={x.user} size="sm"/><div><p className="font-medium text-white">{x.user.name}</p><p className="text-xs text-gray-500">@{x.user.username}</p></div></div><span className="text-sm text-gray-300">{x.solved}</span><span className="text-sm font-semibold text-blue-300">{x.points.toLocaleString()}</span><span className="text-sm text-gray-300">{x.rating}</span></div>)}</div>;return <div className="min-h-full p-5"><div className="mb-5 flex flex-wrap items-center gap-3"><div><h2 className="text-xl font-bold text-white">Global Leaderboard</h2><p className="mt-1 text-sm text-gray-500">Compete, improve, and climb the rankings.</p></div><div className="ml-auto flex items-center gap-2"><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search users" className="w-48 rounded-lg border border-gray-800 bg-gray-900 py-2 pl-9 pr-3 text-sm text-white outline-none"/></div><select value={time} onChange={e=>setTime(e.target.value)} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-300"><option>Overall</option><option>Weekly</option><option>Monthly</option></select></div></div><Tabs tabs={[{label:'Rankings',value:'rankings',content:table},{label:'By Region',value:'region',content:<div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500"><Globe className="mx-auto mb-3"/>Regional rankings are ready for API data.</div>},{label:'By Language',value:'language',content:<div className="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center text-gray-500">Language rankings are ready for API data.</div>}]}/></div>}
+
+import React, { useState } from 'react';
+import { RankBadge, UserAvatar, Spinner, EmptyState } from './SharedComponents';
+import { useLeaderboard, useMyLeaderboardStanding } from '@/lib/api/hooks';
+import { useAuthStore } from '@/store/auth';
+
+const PAGE_SIZE = 20;
+
+const GlobalLeaderboardPage: React.FC = () => {
+  const { user } = useAuthStore();
+  const [offset, setOffset] = useState(0);
+  const { data, isLoading } = useLeaderboard({ offset, limit: PAGE_SIZE });
+  const { data: myStanding } = useMyLeaderboardStanding(true);
+
+  const items = data?.items ?? [];
+  const podium = offset === 0 ? items.slice(0, 3) : [];
+  const rest = offset === 0 ? items.slice(3) : items;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.floor(offset / PAGE_SIZE) + 1;
+
+  return (
+    <div className="min-h-full bg-[#0B0F17] p-6">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Leaderboard</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Ranked by difficulty-weighted points — easy 10, medium 30, hard 50.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Spinner />
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="No one has solved a problem yet"
+            description="Be the first to appear on the leaderboard."
+          />
+        ) : (
+          <>
+            {podium.length > 0 && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {[podium[1], podium[0], podium[2]].map((entry, index) =>
+                  entry ? (
+                    <div
+                      key={entry.user_id}
+                      className={`flex flex-col items-center rounded-lg border p-6 ${
+                        index === 1
+                          ? 'border-amber-600/60 bg-gradient-to-b from-amber-900/20 to-gray-900/60 sm:order-2'
+                          : `border-gray-800 bg-gray-900/60 ${index === 0 ? 'sm:order-1' : 'sm:order-3'}`
+                      }`}
+                    >
+                      <RankBadge rank={entry.rank} />
+                      <div className="mt-3">
+                        <UserAvatar
+                          name={entry.full_name || entry.username}
+                          avatarUrl={entry.avatar_url}
+                          size="lg"
+                        />
+                      </div>
+                      <h3 className="mt-3 text-base font-bold text-white">
+                        {entry.full_name || entry.username}
+                      </h3>
+                      <p className="text-sm text-gray-500">@{entry.username}</p>
+                      <div className="mt-4 grid w-full grid-cols-2 gap-3 border-t border-gray-800 pt-4 text-center">
+                        <div>
+                          <p className="text-[11px] uppercase text-gray-500">Solved</p>
+                          <p className="text-lg font-bold text-white">{entry.solved_count}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase text-gray-500">Points</p>
+                          <p className="text-lg font-bold text-cyan-400">
+                            {entry.points.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={index} />
+                  )
+                )}
+              </div>
+            )}
+
+            <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900/60">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-800 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-5 py-3">Rank</th>
+                    <th className="px-3 py-3">User</th>
+                    <th className="px-3 py-3 text-center">Solved</th>
+                    <th className="px-3 py-3 text-right">Points</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800/70">
+                  {rest.map((entry) => (
+                    <tr
+                      key={entry.user_id}
+                      className={`transition-colors hover:bg-gray-800/40 ${
+                        entry.username === user?.username ? 'bg-cyan-950/20' : ''
+                      }`}
+                    >
+                      <td className="px-5 py-3 font-mono text-sm text-gray-400">#{entry.rank}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar
+                            name={entry.full_name || entry.username}
+                            avatarUrl={entry.avatar_url}
+                            size="sm"
+                          />
+                          <span className="text-sm font-medium text-gray-200">
+                            {entry.full_name || entry.username}
+                            {entry.username === user?.username && (
+                              <span className="ml-2 text-xs text-cyan-400">(you)</span>
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm text-gray-400">
+                        {entry.solved_count}
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-semibold text-gray-300">
+                        {entry.points.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pageCount > 1 && (
+              <div className="flex items-center justify-between text-sm">
+                <button
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  disabled={offset === 0}
+                  className="rounded-lg bg-gray-900/70 px-4 py-2 font-medium text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-gray-500">
+                  Page {page} of {pageCount}
+                </span>
+                <button
+                  onClick={() => setOffset(offset + PAGE_SIZE)}
+                  disabled={page >= pageCount}
+                  className="rounded-lg bg-gray-900/70 px-4 py-2 font-medium text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {myStanding && myStanding.rank && myStanding.rank > offset + items.length && (
+          <div className="sticky bottom-4 flex items-center gap-3 rounded-lg border border-cyan-800/50 bg-gray-900/95 px-5 py-3 shadow-xl">
+            <span className="font-mono text-sm text-cyan-400">#{myStanding.rank}</span>
+            <span className="text-sm font-medium text-cyan-300">Your standing</span>
+            <span className="ml-auto text-sm font-semibold text-gray-300">
+              {myStanding.solved_count} solved · {myStanding.points.toLocaleString()} pts
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default GlobalLeaderboardPage;

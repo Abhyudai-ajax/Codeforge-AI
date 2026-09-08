@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -148,7 +147,9 @@ async def get_pull_request(
     pr_id: str,
     current_user: User = Depends(get_current_active_user),
 ) -> PullRequestSchema:
-    pr = DEMO_PRS.get(pr_id) or DEMO_PRS.get("pr-101")
+    pr = DEMO_PRS.get(pr_id)
+    if pr is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pull request not found")
     return pr
 
 
@@ -162,7 +163,9 @@ async def review_pull_request(
     current_user: User = Depends(get_current_active_user),
     ai_service: AIService = Depends(get_ai_service),
 ) -> AIReviewResponse:
-    pr = DEMO_PRS.get(pr_id) or DEMO_PRS.get("pr-101")
+    pr = DEMO_PRS.get(pr_id)
+    if pr is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pull request not found")
     patch_text = "\n".join([f"File: {f.filename}\n{f.patch}" for f in pr.files])
 
     try:

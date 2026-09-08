@@ -2,12 +2,28 @@
 REM Windows Development startup script
 REM Starts PostgreSQL, Redis, and the backend service
 
+setlocal
 echo.
 echo 🚀 Starting CodeForge AI Development Environment...
 echo.
 
-REM Check if Docker is running
-docker ps > nul 2>&1
+REM Detect Docker Compose command (supports both modern 'docker compose' and legacy 'docker-compose')
+docker compose version > nul 2>&1
+if not errorlevel 1 (
+    set "COMPOSE_CMD=docker compose"
+) else (
+    docker-compose version > nul 2>&1
+    if not errorlevel 1 (
+        set "COMPOSE_CMD=docker-compose"
+    ) else (
+        echo ❌ Docker Desktop is not installed or Docker is not in PATH.
+        echo Please install Docker Desktop and restart the terminal.
+        exit /b 1
+    )
+)
+
+REM Check if Docker daemon is running
+docker info > nul 2>&1
 if errorlevel 1 (
     echo ❌ Docker is not running. Please start Docker Desktop.
     exit /b 1
@@ -15,7 +31,7 @@ if errorlevel 1 (
 
 REM Start services
 echo 📦 Starting Docker services...
-docker-compose up -d postgres redis
+call %COMPOSE_CMD% up -d postgres redis
 
 REM Wait for services to be ready
 echo ⏳ Waiting for services to be ready...
@@ -49,5 +65,5 @@ echo.
 echo 📝 Available commands:
 echo   - Backend:  cd backend ^&^& venv\Scripts\activate ^&^& uvicorn app.main:app --reload
 echo   - Frontend: cd frontend ^&^& npm run dev
-echo   - Docker:   docker-compose up
+echo   - Docker:   %COMPOSE_CMD% up
 echo.

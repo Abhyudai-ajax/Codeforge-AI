@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { Providers } from '@/providers';
+import AuthGuard from '@/components/auth/AuthGuard';
 
 export const metadata: Metadata = {
   title: 'CodeForge AI - AI-Powered Collaborative Coding Platform',
@@ -39,8 +41,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        {/* Providers would be wrapped here in production */}
-        {children}
+        <Providers>
+          <AuthGuard>{children}</AuthGuard>
+        </Providers>
       </body>
     </html>
   );
