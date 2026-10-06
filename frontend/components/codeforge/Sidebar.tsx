@@ -31,15 +31,18 @@ const Sidebar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const { data: submissions } = useMySubmissions(50);
+  const { data: submissions } = useMySubmissions(50, isAuthenticated);
   const { data: standing } = useMyLeaderboardStanding(isAuthenticated);
 
   const weeklySolved = useMemo(() => {
     if (!submissions) return 0;
     const cutoff = Date.now() - WEEK_MS;
-    return submissions.filter(
-      (s) => s.status === 'accepted' && new Date(s.created_at).getTime() >= cutoff
-    ).length;
+    // Count distinct problems, so re-solving one problem doesn't inflate the goal.
+    return new Set(
+      submissions
+        .filter((s) => s.status === 'accepted' && new Date(s.created_at).getTime() >= cutoff)
+        .map((s) => s.problem_id)
+    ).size;
   }, [submissions]);
 
   const mainNavItems = [

@@ -146,15 +146,16 @@ class ContestService:
             limit=limit,
         )
         now = datetime.now(UTC)
+        contest_ids = [contest.id for contest in contests]
+        participant_counts = await self.repo.participant_counts(contest_ids)
+        registrations = (
+            await self.repo.registered_contest_ids(contest_ids, current_user.id)
+            if current_user
+            else set()
+        )
         result_items = []
         for c in contests:
             status_str = self.get_status(c, now)
-            participant_count = await self.repo.count_participants(c.id)
-            is_reg = False
-            if current_user:
-                reg = await self.repo.get_registration(c.id, current_user.id)
-                is_reg = reg is not None
-
             item = ContestListItem(
                 id=c.id,
                 title=c.title,
@@ -163,8 +164,8 @@ class ContestService:
                 end_time=c.end_time,
                 is_published=c.is_published,
                 status=status_str,
-                participant_count=participant_count,
-                is_registered=is_reg,
+                participant_count=participant_counts.get(c.id, 0),
+                is_registered=c.id in registrations,
                 created_at=c.created_at,
             )
             result_items.append(item)

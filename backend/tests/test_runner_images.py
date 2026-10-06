@@ -19,6 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 RUNNERS_DIR = REPO_ROOT / "docker" / "runners"
 
+# The Docker runner images are optional since local execution was added; only
+# check them when a checkout actually ships them.
+pytestmark = pytest.mark.skipif(
+    not RUNNERS_DIR.is_dir(), reason="docker/runners not present in this checkout"
+)
+
 
 @pytest.fixture(scope="module")
 def compose_text() -> str:

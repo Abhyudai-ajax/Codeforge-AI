@@ -199,3 +199,6 @@ Desktop.ini
 .directory
 .nfs*
 
+
+# Office lock files (created while a document is open)
+~$*

@@ -76,7 +76,9 @@ const SubmissionResultsPage: React.FC<{ submissionId: string }> = ({ submissionI
             <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-rose-500">
               Error
             </p>
-            <p className="font-mono text-sm text-rose-300">{submission.error_output}</p>
+            <pre className="overflow-x-auto whitespace-pre font-mono text-sm text-rose-300">
+              {submission.error_output}
+            </pre>
           </div>
         )}
 

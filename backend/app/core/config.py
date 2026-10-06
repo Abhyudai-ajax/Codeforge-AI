@@ -33,12 +33,15 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "http://localhost:8000",
         "http://localhost:5173",
     ]
 
     # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost/codeforge_ai"
+    # A fresh checkout runs without external services. Set DATABASE_URL to
+    # PostgreSQL in deployments that need concurrent production workloads.
+    DATABASE_URL: str = "sqlite+aiosqlite:///./codeforge.db"
     DATABASE_ECHO: bool = False
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10

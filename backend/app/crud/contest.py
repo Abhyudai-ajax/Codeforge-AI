@@ -106,6 +106,27 @@ class ContestRepository:
         )
         return (await self.session.execute(stmt)).scalar_one()
 
+    async def participant_counts(self, contest_ids: list[UUID]) -> dict[UUID, int]:
+        """Fetch participant counts for a page of contests in one query."""
+        if not contest_ids:
+            return {}
+        stmt = (
+            select(ContestRegistration.contest_id, func.count())
+            .where(ContestRegistration.contest_id.in_(contest_ids))
+            .group_by(ContestRegistration.contest_id)
+        )
+        return dict((await self.session.execute(stmt)).all())
+
+    async def registered_contest_ids(self, contest_ids: list[UUID], user_id: UUID) -> set[UUID]:
+        """Fetch a user's registrations for a page of contests in one query."""
+        if not contest_ids:
+            return set()
+        stmt = select(ContestRegistration.contest_id).where(
+            ContestRegistration.contest_id.in_(contest_ids),
+            ContestRegistration.user_id == user_id,
+        )
+        return set((await self.session.execute(stmt)).scalars().all())
+
     async def get_participant(self, contest_id: UUID, user_id: UUID) -> ContestParticipant | None:
         stmt = select(ContestParticipant).where(
             ContestParticipant.contest_id == contest_id,
@@ -150,42 +171,54 @@ class ContestRepository:
         return [(row[0], row[1]) for row in rows], total
 
     async def get_user_contests(self, user_id: UUID) -> list[dict]:
+        ranked_participants = (
+            select(
+                ContestParticipant.contest_id.label("contest_id"),
+                ContestParticipant.user_id.label("user_id"),
+                ContestParticipant.total_score.label("total_score"),
+                ContestParticipant.total_penalty.label("total_penalty"),
+                ContestParticipant.problems_solved.label("problems_solved"),
+                func.rank()
+                .over(
+                    partition_by=ContestParticipant.contest_id,
+                    order_by=(
+                        ContestParticipant.total_score.desc(),
+                        ContestParticipant.total_penalty.asc(),
+                    ),
+                )
+                .label("rank"),
+            )
+            .subquery()
+        )
         stmt = (
-            select(ContestRegistration, Contest)
+            select(
+                ContestRegistration,
+                Contest,
+                ranked_participants.c.rank,
+                ranked_participants.c.total_score,
+                ranked_participants.c.total_penalty,
+                ranked_participants.c.problems_solved,
+            )
             .join(Contest, Contest.id == ContestRegistration.contest_id)
+            .outerjoin(
+                ranked_participants,
+                (ranked_participants.c.contest_id == Contest.id)
+                & (ranked_participants.c.user_id == user_id),
+            )
             .where(ContestRegistration.user_id == user_id)
             .order_by(Contest.start_time.desc())
         )
         rows = (await self.session.execute(stmt)).all()
         results = []
-        for reg, contest in rows:
-            participant = await self.get_participant(contest.id, user_id)
-            rank = None
-            if participant:
-                # Rank calculation
-                higher_rank_stmt = (
-                    select(func.count())
-                    .select_from(ContestParticipant)
-                    .where(
-                        ContestParticipant.contest_id == contest.id,
-                        (ContestParticipant.total_score > participant.total_score)
-                        | (
-                            (ContestParticipant.total_score == participant.total_score)
-                            & (ContestParticipant.total_penalty < participant.total_penalty)
-                        ),
-                    )
-                )
-                higher_count = (await self.session.execute(higher_rank_stmt)).scalar_one()
-                rank = higher_count + 1
-
+        for reg, contest, rank, total_score, total_penalty, problems_solved in rows:
             results.append(
                 {
                     "contest": contest,
                     "registered_at": reg.registered_at,
-                    "rank": rank,
-                    "total_score": participant.total_score if participant else 0,
-                    "total_penalty": participant.total_penalty if participant else 0,
-                    "problems_solved": participant.problems_solved if participant else 0,
+                    "rank": rank if rank is not None else None,
+                    "total_score": total_score if total_score is not None else 0,
+                    "total_penalty": total_penalty if total_penalty is not None else 0,
+                    "problems_solved": problems_solved if problems_solved is not None else 0,
                 }
             )
         return results

@@ -108,7 +108,9 @@ async def test_c_compilation_failure_is_reported_as_compilation_error(client, db
         )
     submission_id = response.json()["id"]
 
-    compile_failure = SandboxResult("", "main.c:1:16: error: expected ';'", 1)
+    compile_failure = SandboxResult(
+        "", "main.c:1:16: error: expected ';'", 1, compile_failed=True
+    )
     with (
         patch("app.workers.submission.AsyncSessionLocal", _TestSessionLocal),
         patch("app.workers.submission.run_source", return_value=compile_failure),
@@ -118,8 +120,8 @@ async def test_c_compilation_failure_is_reported_as_compilation_error(client, db
     body = (await client.get(f"/api/v1/submissions/{submission_id}", headers=headers)).json()
     assert body["status"] == SubmissionStatus.COMPILATION_ERROR.value
     assert body["passed_test_count"] == 0
-    # Compiler output must not leak verbatim to the client.
-    assert "main.c:1:16" not in body["error_output"]
+    # The compiler's message is shown so the user can fix their code.
+    assert "main.c:1:16: error: expected ';'" in body["error_output"]
 
 
 @pytest.mark.asyncio

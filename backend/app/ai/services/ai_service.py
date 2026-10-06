@@ -1,9 +1,13 @@
-"""AI service layer that delegates to configured provider implementations with smart fallbacks."""
+"""AI service layer: delegates to the configured provider, else analyses the input offline."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
+from fastapi import HTTPException
+
+from app.ai import offline_analyzer
 from app.ai.providers import get_ai_provider
 from app.ai.providers.base import BaseAIProvider
 from app.ai.schemas import AITextRequest, AITextResponse
@@ -19,9 +23,16 @@ from app.ai.utils.prompt_templates import (
 
 logger = logging.getLogger(__name__)
 
+_NOT_CONFIGURED = "OpenAI is not configured on this server."
+
 
 class AIService:
-    """Service layer for AI operations with resilient fallbacks."""
+    """Service layer for AI operations.
+
+    When no model is configured (or the provider fails), answers come from
+    ``offline_analyzer``, which inspects the submitted code itself, so the
+    response always reflects what the user actually sent.
+    """
 
     def __init__(self) -> None:
         self._provider: BaseAIProvider | None
@@ -30,142 +41,61 @@ class AIService:
         except Exception:
             self._provider = None
 
-    async def _safe_generate(self, prompt: str, default_text: str) -> str:
-        if not self._provider:
-            return default_text
-        try:
-            return await self._provider.generate_text(prompt)
-        except Exception as e:
-            logger.warning(f"AI Provider execution failed: {e}. Utilizing smart fallback response.")
-            return default_text
+    async def _generate(self, prompt: str, mode: str, request: AITextRequest) -> AITextResponse:
+        failure: str | None = None
+        if self._provider:
+            try:
+                return AITextResponse(result=await self._provider.generate_text(prompt))
+            except HTTPException as e:
+                failure = str(e.detail)
+            except Exception as e:
+                failure = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+        result = await asyncio.to_thread(
+            offline_analyzer.analyze, mode, request.content, request.additional_context
+        )
+        # A missing key is the normal offline case; anything else is worth surfacing.
+        if failure and failure != _NOT_CONFIGURED:
+            logger.warning("AI provider failed (%s); using offline analysis.", failure)
+            result = result.replace(
+                offline_analyzer.OFFLINE_NOTE,
+                f"\n\n---\n_⚠️ The AI model request failed ({failure}). "
+                "Showing offline analysis of your code instead._",
+            )
+        return AITextResponse(result=result)
+
+    def _prompt(self, template: str, request: AITextRequest) -> str:
+        return render_prompt(
+            template, content=request.content, context=request.additional_context
+        )
 
     async def explain_code(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI explain_code request received")
-        prompt = render_prompt(
-            EXPLAIN_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Code Explanation 💡\n\n"
-            "1. **Core Concept**: This solution implements an optimized algorithm using direct hashtable lookup and pointer manipulation.\n"
-            "2. **Time Complexity**: \\(O(N)\\) linear iteration through the input data.\n"
-            "3. **Space Complexity**: \\(O(N)\\) auxiliary memory to store elements in memory.\n"
-            "4. **Key Pattern**: Hash map complement matching to achieve optimal single-pass performance."
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(EXPLAIN_PROMPT, request), "explain", request)
 
     async def review_code(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI review_code request received")
-        prompt = render_prompt(
-            CODE_REVIEW_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Code Review Summary 🔍\n\n"
-            "- **Quality Rating**: 9/10 (Production Grade)\n"
-            "- **Pros**: Clean variable naming, optimal algorithmic time complexity, concise early exits.\n"
-            "- **Suggestions**:\n"
-            "  - Consider adding type annotations to public function signatures.\n"
-            "  - Handle potential empty input collections gracefully before entering the main loop."
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(CODE_REVIEW_PROMPT, request), "review", request)
 
     async def debug_code(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI debug_code request received")
-        prompt = render_prompt(
-            DEBUG_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Debug Analysis 🐛\n\n"
-            "- **Issue Identified**: Index Out of Bounds or KeyError on empty dictionary lookup.\n"
-            "- **Fix**: Check `if key in dict:` or use `dict.get(key, default)` before indexing.\n"
-            "- **Recommended Patch**:\n"
-            "```python\n"
-            "if not nums:\n"
-            "    return []\n"
-            "```"
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(DEBUG_PROMPT, request), "debug", request)
 
     async def generate_tests(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI generate_tests request received")
-        prompt = render_prompt(
-            GENERATE_TESTS_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Generated Unit Tests 🧪\n\n"
-            "```python\n"
-            "import pytest\n\n"
-            "def test_standard_case():\n"
-            "    assert solution([2, 7, 11, 15], 9) == [0, 1]\n\n"
-            "def test_empty_input():\n"
-            "    assert solution([], 0) == []\n\n"
-            "def test_duplicate_elements():\n"
-            "    assert solution([3, 3], 6) == [0, 1]\n"
-            "```"
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(GENERATE_TESTS_PROMPT, request), "tests", request)
 
     async def generate_documentation(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI generate_documentation request received")
-        prompt = render_prompt(
-            DOCUMENTATION_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Technical Documentation 📚\n\n"
-            "#### Overview\n"
-            "Provides an efficient solution for item lookup and pattern evaluation.\n\n"
-            "#### Parameters\n"
-            "- `data` (*List[int]*): Input dataset to analyze.\n"
-            "- `target` (*int*): Target matching value.\n\n"
-            "#### Returns\n"
-            "- `List[int]`: Pair indices satisfying the target condition."
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(DOCUMENTATION_PROMPT, request), "docs", request)
 
     async def generate_dsa_hint(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI generate_dsa_hint request received")
-        prompt = render_prompt(
-            DSA_HINT_PROMPT, content=request.content, context=request.additional_context
-        )
-        fallback = (
-            "### Algorithmic Hint 💡\n\n"
-            "Instead of checking all pairs with nested loops \\(O(N^2)\\), store visited values "
-            "and their indices in a Hash Table (`seen = {}`). For each element `x`, check if "
-            "`target - x` exists in your Hash Table. This lowers complexity to \\(O(N)\\) time and \\(O(N)\\) space!"
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(self._prompt(DSA_HINT_PROMPT, request), "hint", request)
 
     async def generate_interview_feedback(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI generate_interview_feedback request received")
         prompt = (
             f"Analyze the following interview session performance:\n\n{request.content}\n"
             f"Context: {request.additional_context or ''}"
         )
-        fallback = (
-            "### Interview Evaluation Feedback 🎯\n\n"
-            "- **Strengths**: Clear communication of core algorithmic strategy, good variable naming.\n"
-            "- **Areas for Growth**: Explicitly verify boundary constraints and memory limits before implementation.\n"
-            "- **Next Steps**: Focus on optimizing space complexity with in-place pointer modifications."
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(prompt, "interview", request)
 
     async def generate_roadmap_recommendations(self, request: AITextRequest) -> AITextResponse:
-        logger.info("AI generate_roadmap_recommendations request received")
         prompt = (
             f"Suggest next learning steps for user based on progress:\n\n{request.content}\n"
             f"Context: {request.additional_context or ''}"
         )
-        fallback = (
-            "### AI Personalized Roadmap Suggestions 🚀\n\n"
-            "1. **Focus Topic**: Dynamic Programming & Graph Traversal\n"
-            "2. **Recommended Progression**: Solve 3 Medium-difficulty BFS/DFS problems to reinforce graph building.\n"
-            "3. **Milestone Target**: Reach 80% mastery in Trees & Graphs before moving to Advanced DP."
-        )
-        res = await self._safe_generate(prompt, fallback)
-        return AITextResponse(result=res)
+        return await self._generate(prompt, "roadmap", request)

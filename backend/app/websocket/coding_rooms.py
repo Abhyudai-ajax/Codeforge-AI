@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from collections import defaultdict
 from typing import Any
@@ -16,6 +17,10 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# How long to stop trying Redis after it fails. Without this, every room event
+# waits out a fresh connection attempt (~4s on Windows when nothing listens).
+_REDIS_RETRY_SECONDS = 30.0
+
 
 class RoomConnectionManager:
     """Fan out collaboration events locally and through Redis pub/sub across API replicas."""
@@ -25,16 +30,33 @@ class RoomConnectionManager:
         self.connections: dict[str, set[WebSocket]] = defaultdict(set)
         self._redis: redis.Redis | None = None
         self._listeners: dict[str, asyncio.Task[None]] = {}
+        self._redis_ready = False
+        self._redis_retry_at = 0.0
 
     async def _client(self) -> redis.Redis | None:
+        if self._redis_ready:
+            return self._redis
+        if time.monotonic() < self._redis_retry_at:
+            return None
         if self._redis is None:
-            self._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            self._redis = redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=1,
+            )
         try:
             await self._redis.ping()
         except Exception:
-            logger.warning("Redis unavailable; room events are limited to this API instance.")
+            self._mark_redis_down()
             return None
+        self._redis_ready = True
         return self._redis
+
+    def _mark_redis_down(self) -> None:
+        if self._redis_ready or not self._redis_retry_at:
+            logger.warning("Redis unavailable; room events are limited to this API instance.")
+        self._redis_ready = False
+        self._redis_retry_at = time.monotonic() + _REDIS_RETRY_SECONDS
 
     async def connect(self, room_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -57,7 +79,10 @@ class RoomConnectionManager:
         await self._broadcast(room_id, payload, exclude=sender)
         client = await self._client()
         if client:
-            await client.publish(f"codeforge:room:{room_id}", json.dumps(envelope))
+            try:
+                await client.publish(f"codeforge:room:{room_id}", json.dumps(envelope))
+            except Exception:
+                self._mark_redis_down()
 
     async def _broadcast(
         self, room_id: str, payload: dict[str, Any], exclude: WebSocket | None = None

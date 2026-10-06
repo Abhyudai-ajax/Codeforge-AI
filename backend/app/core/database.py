@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: F401
     async_sessionmaker,
     create_async_engine,
 )
+from datetime import UTC, datetime
+
+from sqlalchemy import DateTime, event, inspect
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.config import settings
 
@@ -44,6 +48,23 @@ AsyncSessionLocal = async_sessionmaker(
 
 # Base model for all ORM models
 Base = declarative_base()
+
+
+if engine.dialect.name == "sqlite":
+    # SQLite has no timezone type: every timestamp is written in UTC but read
+    # back naive, which browsers then misread as local time and which breaks
+    # comparisons against aware datetimes. Re-attach UTC as rows load.
+
+    def _attach_utc(instance, *_args) -> None:
+        for prop in inspect(instance).mapper.column_attrs:
+            if not isinstance(prop.columns[0].type, DateTime):
+                continue
+            value = instance.__dict__.get(prop.key)
+            if isinstance(value, datetime) and value.tzinfo is None:
+                set_committed_value(instance, prop.key, value.replace(tzinfo=UTC))
+
+    event.listen(Base, "load", _attach_utc, propagate=True)
+    event.listen(Base, "refresh", _attach_utc, propagate=True)
 
 
 async def get_db():

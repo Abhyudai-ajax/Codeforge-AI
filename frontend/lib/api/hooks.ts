@@ -122,7 +122,8 @@ export function useProblemReview(problemId: string) {
 
 /** Polls a queued/running submission until the judge marks it complete. */
 export function useSubmissionPolling(submissionId: string | undefined) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: ['submission', submissionId],
     queryFn: () => submissionsApi.get(submissionId as string),
     enabled: !!submissionId,
@@ -131,6 +132,18 @@ export function useSubmissionPolling(submissionId: string | undefined) {
       return data && !data.completed_at ? 1200 : false;
     },
   });
+
+  // Submitting only queues the job, so stats refreshed at submit time are still
+  // pre-verdict. Refresh everything a verdict affects once judging finishes.
+  const completedAt = query.data?.completed_at;
+  useEffect(() => {
+    if (!completedAt) return;
+    for (const key of [['submissions'], ['progress'], ['leaderboard'], ['roadmap'], ['me']]) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+  }, [completedAt, queryClient]);
+
+  return query;
 }
 
 export function useProblemSubmissionHistory(problemId: string) {
@@ -141,10 +154,12 @@ export function useProblemSubmissionHistory(problemId: string) {
   });
 }
 
-export function useMySubmissions(limit = 10) {
+export function useMySubmissions(limit = 10, enabled = true) {
   return useQuery({
     queryKey: ['submissions', 'mine', limit],
     queryFn: () => usersApi.submissions({ limit }),
+    enabled,
+    retry: false,
   });
 }
 
@@ -153,6 +168,7 @@ export function useProgressSummary(enabled: boolean) {
     queryKey: ['progress', 'summary'],
     queryFn: () => usersApi.progress(),
     enabled,
+    retry: false,
   });
 }
 
@@ -161,6 +177,7 @@ export function useProgressByProblem(enabled: boolean) {
     queryKey: ['progress', 'by-problem'],
     queryFn: () => usersApi.progressByProblem(),
     enabled,
+    retry: false,
   });
 }
 
@@ -189,6 +206,7 @@ export function useMyRoadmap(enabled: boolean) {
     queryKey: ['roadmap', 'mine'],
     queryFn: () => roadmapsApi.mine(),
     enabled,
+    retry: false,
   });
 }
 

@@ -13,13 +13,35 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+_OPENAI_DEFAULTS = ("https://api.openai.com/v1", "gpt-4o-mini")
+
+# OpenAI-compatible services recognised by their key prefix, so pasting a key is
+# enough. An explicitly configured base URL or model always wins.
+_COMPATIBLE_SERVICES = {
+    "gsk_": ("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),  # Groq
+    "xai-": ("https://api.x.ai/v1", "grok-3-mini"),  # xAI Grok
+}
+
+
+def resolve_endpoint(api_key: str, base_url: str, model: str) -> tuple[str, str]:
+    """Pick the base URL and model for the service this key belongs to."""
+    for prefix, (service_url, service_model) in _COMPATIBLE_SERVICES.items():
+        if api_key.startswith(prefix):
+            if base_url.rstrip("/") == _OPENAI_DEFAULTS[0]:
+                base_url = service_url
+            if model == _OPENAI_DEFAULTS[1]:
+                model = service_model
+            break
+    return base_url, model
+
+
 class OpenAIProvider(BaseAIProvider):
     """AI provider implementation that calls the OpenAI REST API."""
 
     async def generate_text(
         self,
         prompt: str,
-        max_tokens: int = 800,
+        max_tokens: int = 2000,
         temperature: float = 0.2,
     ) -> str:
         if not settings.OPENAI_API_KEY:
@@ -29,9 +51,12 @@ class OpenAIProvider(BaseAIProvider):
                 detail="OpenAI is not configured on this server.",
             )
 
-        url = f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions"
+        base_url, model = resolve_endpoint(
+            settings.OPENAI_API_KEY, settings.OPENAI_BASE_URL, settings.OPENAI_MODEL
+        )
+        url = f"{base_url.rstrip('/')}/chat/completions"
         payload = {
-            "model": settings.OPENAI_MODEL,
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "temperature": temperature,
@@ -50,9 +75,13 @@ class OpenAIProvider(BaseAIProvider):
                 response.status_code,
                 response.text,
             )
+            try:
+                reason = response.json()["error"]["message"]
+            except Exception:
+                reason = response.reason_phrase
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to receive a valid response from OpenAI.",
+                detail=f"AI service ({base_url}) returned HTTP {response.status_code}: {reason}",
             )
 
         body = response.json()

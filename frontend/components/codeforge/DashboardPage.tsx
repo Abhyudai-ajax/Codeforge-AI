@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Play,
   Send,
@@ -216,9 +218,11 @@ const DashboardPage: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  <p className="line-clamp-2 text-sm leading-relaxed text-gray-400">
-                    {daily.description_md}
-                  </p>
+                  <div className="markdown-body max-h-64 max-w-none overflow-y-auto pr-2 text-sm text-gray-300">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {daily.description_md}
+                    </ReactMarkdown>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-4 p-5">

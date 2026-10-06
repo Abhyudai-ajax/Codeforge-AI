@@ -19,7 +19,7 @@ from app.schemas.problem import (
     RunTestResult,
 )
 from app.workers.sandbox import run_source
-from app.workers.submission import _failure_status, _same_output
+from app.workers.submission import _error_excerpt, _failure_status, _same_output
 
 
 class ProblemExecutionService:
@@ -51,6 +51,7 @@ class ProblemExecutionService:
             raise HTTPException(422, "This problem has no runnable test cases.")
 
         results: list[RunTestResult] = []
+        failure_status: str | None = None
         total_runtime = 0
         for index, case in enumerate(cases, start=1):
             started = time.monotonic()
@@ -72,8 +73,10 @@ class ProblemExecutionService:
             error = ""
             if result.timed_out:
                 error = "Time limit exceeded."
+                failure_status = SubmissionStatus.TIME_LIMIT_EXCEEDED.value
             elif result.exit_code != 0:
-                error = "Program failed in the isolated runner."
+                error = _error_excerpt(result.stderr)
+                failure_status = _failure_status(result.stderr, result.compile_failed).value
             results.append(
                 RunTestResult(
                     test_case=index,
@@ -91,13 +94,7 @@ class ProblemExecutionService:
         passed_count = sum(result.passed for result in results)
         status = SubmissionStatus.ACCEPTED.value
         if passed_count != len(cases):
-            failed = results[-1]
-            if failed.error == "Time limit exceeded.":
-                status = SubmissionStatus.TIME_LIMIT_EXCEEDED.value
-            elif failed.error:
-                status = _failure_status(language, failed.error).value
-            else:
-                status = SubmissionStatus.WRONG_ANSWER.value
+            status = failure_status or SubmissionStatus.WRONG_ANSWER.value
         return RunCodeResponse(
             status=status,
             passed_test_cases=passed_count,

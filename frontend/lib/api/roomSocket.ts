@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { tokenStorage } from './client';
 import type { RoomDocument, RoomMemberRole } from './types';
 
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:8000';
 
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 

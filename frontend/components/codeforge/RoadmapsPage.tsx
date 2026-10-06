@@ -14,10 +14,28 @@ import {
 
 const RoadmapsPage: React.FC = () => {
   const { data: roadmaps, isLoading: loadingRoadmaps } = useRoadmaps();
-  const { data: myRoadmap } = useMyRoadmap(true);
+  const { data: myRoadmap, isLoading: loadingMyRoadmap } = useMyRoadmap(true);
   const { data: progress } = useRoadmapProgress(!!myRoadmap);
   const { data: recommendations } = useRoadmapRecommendations(!!myRoadmap);
   const selectRoadmap = useSelectRoadmap();
+
+  if (loadingRoadmaps || loadingMyRoadmap) {
+    return (
+      <div className="min-h-full bg-[#0B0F17] p-6">
+        <div className="mx-auto max-w-5xl space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">DSA Roadmaps</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Structured paths through the problem catalog, by topic.
+            </p>
+          </div>
+          <div className="flex h-48 items-center justify-center rounded-lg border border-gray-800 bg-gray-900/60 p-6">
+            <Spinner />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-[#0B0F17] p-6">
@@ -34,9 +52,7 @@ const RoadmapsPage: React.FC = () => {
             <h2 className="mb-4 text-sm font-semibold text-white">
               Choose a roadmap to start tracking progress
             </h2>
-            {loadingRoadmaps ? (
-              <Spinner />
-            ) : !roadmaps || roadmaps.length === 0 ? (
+            {!roadmaps || roadmaps.length === 0 ? (
               <EmptyState title="No roadmaps published yet" />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -56,7 +72,7 @@ const RoadmapsPage: React.FC = () => {
                       disabled={selectRoadmap.isPending}
                       onClick={() => selectRoadmap.mutate(roadmap.id)}
                     >
-                      Select this roadmap
+                      {selectRoadmap.isPending ? 'Selecting...' : 'Select this roadmap'}
                     </Button>
                   </div>
                 ))}

@@ -19,7 +19,7 @@ class OllamaProvider(BaseAIProvider):
     async def generate_text(
         self,
         prompt: str,
-        max_tokens: int = 800,
+        max_tokens: int = 2000,
         temperature: float = 0.2,
     ) -> str:
         url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/completions"

@@ -3,6 +3,7 @@ FastAPI Application Entry Point
 Main application factory and configuration
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal, close_db
 from app.core.logger import setup_logging
 
 # Setup logging
@@ -55,6 +57,23 @@ class UnhandledExceptionMiddleware:
             await response(scope, receive, send)
 
 
+async def _fail_orphaned_submissions() -> None:
+    """In eager mode judging runs inside this process, so anything still queued or
+    running at startup was cut off by a restart and would otherwise poll forever."""
+    from app.crud.problem import ProblemRepository
+
+    try:
+        async with AsyncSessionLocal() as session:
+            count = await ProblemRepository(session).fail_unfinished_submissions(
+                "Judging was interrupted by a server restart. Please submit again."
+            )
+        if count:
+            logger.info("Marked %d interrupted submission(s) as failed.", count)
+    except Exception:
+        # A fresh database may not have its tables yet; never block startup on this.
+        logger.exception("Could not clean up interrupted submissions.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -64,9 +83,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting CodeForge AI Backend")
     logger.info(f"Environment: {settings.ENV}")
+    if settings.CELERY_TASK_ALWAYS_EAGER:
+        await _fail_orphaned_submissions()
+    from app.workers.sandbox import warm_up
+
+    warm_up_task = asyncio.create_task(asyncio.to_thread(warm_up))
     yield
+    warm_up_task.cancel()
     # Shutdown
     logger.info("Shutting down CodeForge AI Backend")
+    await close_db()
 
 
 def create_app() -> FastAPI:

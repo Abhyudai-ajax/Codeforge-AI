@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from app.core import languages
@@ -37,12 +37,28 @@ if not _DOCKER:
     )
 
 
+_STARTUP_ALLOWANCE_SECONDS = 1.5
+
+
+def warm_up() -> None:
+    """Load the local interpreters once so the first real run isn't a cold start."""
+    if _DOCKER:
+        return
+    for language, source in (("python", "pass\n"), ("javascript", "\n")):
+        try:
+            run_source(language, source, "", 15, 128)
+        except Exception:
+            logger.debug("Warm-up for %s skipped.", language, exc_info=True)
+
+
 @dataclass(frozen=True)
 class SandboxResult:
     stdout: str
     stderr: str
     exit_code: int | None
     timed_out: bool = False
+    compile_failed: bool = False
+    """True when the source never ran because the compiler (or parser) rejected it."""
 
 
 def run_source(
@@ -58,8 +74,37 @@ def run_source(
         source_path = Path(directory, spec.source_filename)
         source_path.write_text(source_code, encoding="utf-8")
         if _DOCKER:
-            return _run_in_docker(spec, directory, stdin, timeout_seconds, memory_mb)
-        return _run_locally(spec, directory, source_path, stdin, timeout_seconds)
+            result = _run_in_docker(spec, directory, stdin, timeout_seconds, memory_mb)
+        else:
+            result = _run_locally(spec, directory, source_path, stdin, timeout_seconds)
+        return _clean_diagnostics(result, directory)
+
+
+def _clean_diagnostics(result: SandboxResult, directory: str) -> SandboxResult:
+    """Make stderr read like the user's file (`main.py:3`) and flag parse errors."""
+    stderr = result.stderr
+    for prefix in {directory, str(Path(directory).resolve()), "/workspace"}:
+        for separator in ("\\", "/"):
+            stderr = stderr.replace(prefix + separator, "")
+    lines = [
+        line
+        for line in stderr.splitlines()
+        if not (line.strip().startswith("at ") and "node:internal" in line)
+        and not line.startswith("Node.js v")
+    ]
+    stderr = "\n".join(lines).strip()
+    # A file Node can't parse fails before any frame inside the user's code runs.
+    node_parse_error = any(line.startswith("SyntaxError") for line in lines) and not any(
+        line.strip().startswith("at ") and "main.js:" in line for line in lines
+    )
+    if node_parse_error or _is_python_syntax_error(stderr):
+        return replace(result, stderr=stderr, compile_failed=True)
+    return replace(result, stderr=stderr)
+
+
+def _is_python_syntax_error(stderr: str) -> bool:
+    last_line = stderr.splitlines()[-1] if stderr else ""
+    return last_line.startswith(("SyntaxError", "IndentationError", "TabError"))
 
 
 def _run_in_docker(
@@ -100,7 +145,14 @@ def _run_in_docker(
             timeout=timeout_seconds,
             check=False,
         )
-        return SandboxResult(result.stdout[:65536], result.stderr[:65536], result.returncode)
+        # The container compiles and runs in one command, so a compiled language's
+        # failure can't be attributed to either phase; report it as a build error.
+        return SandboxResult(
+            result.stdout[:65536],
+            result.stderr[:65536],
+            result.returncode,
+            compile_failed=spec.compiled and result.returncode != 0,
+        )
     except subprocess.TimeoutExpired as exc:
         return _timeout_result(exc)
 
@@ -137,12 +189,21 @@ def _run_locally(
             )
             if compiled.returncode != 0:
                 return SandboxResult(
-                    compiled.stdout[:65536], compiled.stderr[:65536], compiled.returncode
+                    compiled.stdout[:65536],
+                    compiled.stderr[:65536],
+                    compiled.returncode,
+                    compile_failed=True,
                 )
             return _exec(["java", "-cp", directory, "Main"], stdin, timeout_seconds)
         raise ValueError(f"No local runner registered for language {spec.id!r}.")
     except subprocess.TimeoutExpired as exc:
         return _timeout_result(exc)
+    except FileNotFoundError as exc:
+        # The toolchain for this language isn't installed on the host.
+        missing = Path(exc.filename).name if exc.filename else "the required toolchain"
+        return SandboxResult(
+            "", f"{spec.label} is not available on this server: {missing} not found on PATH.", 127
+        )
 
 
 def _binary_path(directory: str) -> str:
@@ -160,13 +221,25 @@ def _compile_and_run(
         check=False,
     )
     if compiled.returncode != 0:
-        return SandboxResult(compiled.stdout[:65536], compiled.stderr[:65536], compiled.returncode)
+        return SandboxResult(
+            compiled.stdout[:65536],
+            compiled.stderr[:65536],
+            compiled.returncode,
+            compile_failed=True,
+        )
     return _exec([_binary_path(directory)], stdin, timeout_seconds)
 
 
 def _exec(argv: list[str], stdin: str, timeout_seconds: float) -> SandboxResult:
+    # Process start-up (interpreter load, antivirus scan of the fresh file) is
+    # wall-clock time the program didn't spend running; don't charge it as TLE.
     result = subprocess.run(
-        argv, input=stdin, text=True, capture_output=True, timeout=timeout_seconds, check=False
+        argv,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        timeout=timeout_seconds + _STARTUP_ALLOWANCE_SECONDS,
+        check=False,
     )
     return SandboxResult(result.stdout[:65536], result.stderr[:65536], result.returncode)
 

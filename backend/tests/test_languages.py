@@ -58,14 +58,14 @@ def test_sandbox_specs_track_the_registry():
 def test_compiled_languages_report_compilation_errors(language: str):
     assert languages.is_compiled(language)
     assert terminal_status(language, 1).value == "compilation_error"
-    assert _failure_status(language, "syntax error").value == "compilation_error"
+    assert _failure_status("error: expected ';'", compile_failed=True).value == "compilation_error"
 
 
 @pytest.mark.parametrize("language", ["python", "javascript"])
 def test_interpreted_languages_report_runtime_errors(language: str):
     assert not languages.is_compiled(language)
     assert terminal_status(language, 1).value == "runtime_error"
-    assert _failure_status(language, "traceback").value == "runtime_error"
+    assert _failure_status("Traceback ...", compile_failed=False).value == "runtime_error"
 
 
 def test_starter_code_renders_the_problem_header_per_language():

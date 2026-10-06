@@ -34,6 +34,7 @@ def captured(monkeypatch):
         }
         return subprocess.CompletedProcess(argv, 0, "ok\n", "")
 
+    monkeypatch.setattr(sandbox, "_DOCKER", "docker")
     monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
     return recorded
 

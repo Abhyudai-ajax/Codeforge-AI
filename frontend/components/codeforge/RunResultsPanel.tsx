@@ -15,7 +15,7 @@ export const RunResultsPanel: React.FC<{ result: RunCodeResponse }> = ({ result 
         {formatStatusLabel(result.status)}
       </span>
     </div>
-    <div className="max-h-48 space-y-2 overflow-y-auto">
+    <div className="max-h-72 space-y-2 overflow-y-auto">
       {result.test_results.map((testCase) => (
         <div
           key={testCase.test_case}
@@ -39,12 +39,12 @@ export const RunResultsPanel: React.FC<{ result: RunCodeResponse }> = ({ result 
                 expected:{' '}
                 <span className="text-emerald-400">{truncate(testCase.expected_output)}</span>
               </p>
-              <p className="text-gray-500">
-                got:{' '}
-                <span className="text-rose-400">
-                  {truncate(testCase.actual_output || testCase.error)}
-                </span>
-              </p>
+              {(testCase.actual_output || !testCase.error) && (
+                <p className="text-gray-500">
+                  got: <span className="text-rose-400">{truncate(testCase.actual_output)}</span>
+                </p>
+              )}
+              {testCase.error && <ErrorOutput text={testCase.error} />}
             </div>
           )}
         </div>
@@ -72,11 +72,20 @@ export const SubmissionStatusPanel: React.FC<{ submission: SubmissionResponse }>
         )}
       </div>
       {isDone && submission.error_output && (
-        <p className="mt-2 font-mono text-xs text-rose-400">{submission.error_output}</p>
+        <div className="mt-2">
+          <ErrorOutput text={submission.error_output} />
+        </div>
       )}
     </div>
   );
 };
+
+/** Compiler/runtime output, kept verbatim so caret markers line up. */
+export const ErrorOutput: React.FC<{ text: string }> = ({ text }) => (
+  <pre className="max-h-48 overflow-auto whitespace-pre rounded border border-rose-900/40 bg-rose-950/20 p-2 font-mono text-[11px] leading-relaxed text-rose-300">
+    {text}
+  </pre>
+);
 
 function truncate(text: string, max = 80): string {
   const clean = text.replace(/\n/g, ' ⏎ ');

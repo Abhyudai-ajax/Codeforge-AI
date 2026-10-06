@@ -7,21 +7,30 @@ from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.problem import (
     Submission,
     SubmissionStatus,
     UserProblemProgress,
 )
-from app.models.roadmap import Roadmap, UserRoadmapSelection
+from app.models.roadmap import Roadmap, RoadmapStage, RoadmapStageProblem, UserRoadmapSelection
 
 
 class CRUDRoadmap:
     """CRUD operations for Roadmaps and user progress tracking."""
 
+    def _eager_options(self):
+        return [
+            selectinload(Roadmap.stages)
+            .selectinload(RoadmapStage.problems)
+            .selectinload(RoadmapStageProblem.problem)
+        ]
+
     async def get_default_roadmap(self, db: AsyncSession) -> Roadmap | None:
         stmt = (
             select(Roadmap)
+            .options(*self._eager_options())
             .where(
                 Roadmap.is_default.is_(True),
                 Roadmap.is_published.is_(True),
@@ -32,19 +41,19 @@ class CRUDRoadmap:
         return res.scalars().first()
 
     async def get_by_id(self, db: AsyncSession, roadmap_id: uuid.UUID) -> Roadmap | None:
-        stmt = select(Roadmap).where(Roadmap.id == roadmap_id)
+        stmt = select(Roadmap).options(*self._eager_options()).where(Roadmap.id == roadmap_id)
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
     async def get_by_slug(self, db: AsyncSession, slug: str) -> Roadmap | None:
-        stmt = select(Roadmap).where(Roadmap.slug == slug)
+        stmt = select(Roadmap).options(*self._eager_options()).where(Roadmap.slug == slug)
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
 
     async def list_roadmaps(
         self, db: AsyncSession, published_only: bool = True
     ) -> Sequence[Roadmap]:
-        stmt = select(Roadmap)
+        stmt = select(Roadmap).options(*self._eager_options())
         if published_only:
             stmt = stmt.where(Roadmap.is_published.is_(True))
         stmt = stmt.order_by(Roadmap.order.asc(), Roadmap.title.asc())

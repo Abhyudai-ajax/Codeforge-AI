@@ -12,7 +12,7 @@ class BaseAIProvider(ABC):
     async def generate_text(
         self,
         prompt: str,
-        max_tokens: int = 800,
+        max_tokens: int = 2000,
         temperature: float = 0.2,
     ) -> str:
         """Generate a text completion for the supplied prompt."""

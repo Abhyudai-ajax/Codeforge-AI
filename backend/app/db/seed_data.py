@@ -1,4 +1,4 @@
-"""Seed the database with the curated DSA catalog, a demo user, and a demo project.
+"""Seed the database with the DSA catalog, roadmaps, contests, a demo user and project.
 
 Re-running the seeder is safe: existing problems are refreshed in place from
 ``app.db.problem_catalog`` rather than duplicated, so editing the catalog and
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -16,9 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.db.problem_catalog import CATALOG, ProblemSpec
+from app.models.contest import Contest, ContestProblem
 from app.models.problem import Problem, ProblemDifficulty, ProblemTag, TestCase
 from app.models.project import Project, ProjectVisibility
 from app.models.project_file import ProjectFile
+from app.models.roadmap import Roadmap, RoadmapStage, RoadmapStageProblem
 from app.models.user import User, UserRole
 
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +30,48 @@ logger = logging.getLogger("seed_data")
 DEMO_USERNAME = "demo_dev"
 DEMO_PASSWORD = "password123"
 DEMO_PROJECT_TITLE = "CodeForge AI Playground"
+
+# (stage title, catalog categories) in the order a learner should tackle them.
+DSA_MASTERY_STAGES: list[tuple[str, tuple[str, ...]]] = [
+    ("Arrays & Hashing", ("arrays", "hashing")),
+    ("Two Pointers & Sliding Window", ("two pointers", "sliding window")),
+    ("Strings", ("strings",)),
+    ("Stacks & Queues", ("stack", "queue", "design")),
+    ("Linked Lists", ("linked list",)),
+    ("Binary Search", ("binary search",)),
+    ("Prefix Sums, Sorting & Bits", ("prefix sum", "sorting", "bit manipulation")),
+    ("Heaps", ("heaps",)),
+    ("Trees", ("trees",)),
+    ("Graphs", ("graphs",)),
+    ("Greedy", ("greedy",)),
+    ("Backtracking", ("backtracking",)),
+    ("Dynamic Programming", ("dynamic programming",)),
+]
+
+# (slug, title, start offset from now, duration, problem slugs).
+DEMO_CONTESTS: list[tuple[str, str, timedelta, timedelta, tuple[str, ...]]] = [
+    (
+        "weekly-warmup",
+        "Weekly Warm-up",
+        timedelta(hours=-1),
+        timedelta(days=7),
+        ("two-sum", "valid-parentheses", "maximum-subarray", "number-of-islands"),
+    ),
+    (
+        "algorithms-sprint",
+        "Algorithms Sprint",
+        timedelta(days=3),
+        timedelta(hours=2),
+        ("3sum", "coin-change", "course-schedule", "trapping-rain-water"),
+    ),
+    (
+        "starter-round",
+        "Starter Round",
+        timedelta(days=-7),
+        timedelta(hours=2),
+        ("array-sum", "climbing-stairs", "reverse-linked-list"),
+    ),
+]
 
 
 async def _resolve_tags(db: AsyncSession, names: set[str]) -> dict[str, ProblemTag]:
@@ -190,6 +235,105 @@ async def seed_demo_project(db: AsyncSession, owner: User) -> None:
     await db.commit()
 
 
+def _slugify(title: str) -> str:
+    return "-".join("".join(c if c.isalnum() else " " for c in title.lower()).split())
+
+
+async def seed_roadmaps(db: AsyncSession) -> None:
+    """Create the built-in roadmaps from the catalog if they don't exist yet."""
+    problems = {p.slug: p for p in (await db.execute(select(Problem))).scalars()}
+    by_category: dict[str, list[Problem]] = {}
+    for spec in CATALOG:
+        if spec.slug in problems:
+            by_category.setdefault(spec.category.strip().lower(), []).append(problems[spec.slug])
+
+    # Each stage is tagged with its first category for the progress breakdown.
+    full_stages = [
+        (title, cats[0], [p for c in cats for p in by_category.get(c, [])])
+        for title, cats in DSA_MASTERY_STAGES
+    ]
+    easy_stages = [
+        (title, category, [p for p in stage if p.difficulty == ProblemDifficulty.EASY])
+        for title, category, stage in full_stages
+    ]
+    roadmaps = [
+        (
+            "dsa-mastery",
+            "DSA Mastery",
+            "Every problem in the catalog, grouped by topic and ordered from fundamentals "
+            "to dynamic programming.",
+            True,
+            full_stages,
+        ),
+        (
+            "beginner-path",
+            "Beginner Path",
+            "Only the easy problems, topic by topic. A gentle start before DSA Mastery.",
+            False,
+            easy_stages,
+        ),
+    ]
+
+    existing = set((await db.execute(select(Roadmap.slug))).scalars())
+    for order, (slug, title, description, is_default, stages) in enumerate(roadmaps):
+        if slug in existing:
+            continue
+        roadmap = Roadmap(
+            slug=slug,
+            title=title,
+            description_md=description,
+            is_published=True,
+            is_default=is_default,
+            order=order,
+        )
+        non_empty = [stage for stage in stages if stage[2]]
+        roadmap.stages = [
+            RoadmapStage(
+                title=stage_title,
+                slug=_slugify(stage_title),
+                category_name=category,
+                order=stage_order,
+                problems=[
+                    RoadmapStageProblem(problem_id=problem.id, order=i)
+                    for i, problem in enumerate(stage_problems)
+                ],
+            )
+            for stage_order, (stage_title, category, stage_problems) in enumerate(non_empty)
+        ]
+        db.add(roadmap)
+        logger.info("Created roadmap %r with %d stages.", slug, len(roadmap.stages))
+    await db.commit()
+
+
+async def seed_contests(db: AsyncSession, owner: User) -> None:
+    """Create demo contests (running, upcoming, ended) if they don't exist yet."""
+    problems = {p.slug: p for p in (await db.execute(select(Problem))).scalars()}
+    existing = set((await db.execute(select(Contest.slug))).scalars())
+    now = datetime.now(UTC)
+    for slug, title, start_offset, duration, problem_slugs in DEMO_CONTESTS:
+        if slug in existing:
+            continue
+        start = now + start_offset
+        contest = Contest(
+            slug=slug,
+            title=title,
+            description_md=f"{title}: solve as many problems as you can before time runs out.",
+            start_time=start,
+            end_time=start + duration,
+            is_published=True,
+            created_by_id=owner.id,
+        )
+        contest.problems = [
+            ContestProblem(
+                problem_id=problems[ps].id, order=i, label=chr(ord("A") + i), points=100 * (i + 1)
+            )
+            for i, ps in enumerate(p for p in problem_slugs if p in problems)
+        ]
+        db.add(contest)
+        logger.info("Created contest %r.", slug)
+    await db.commit()
+
+
 async def seed_all() -> None:
     logger.info("Initializing database tables...")
     await init_db()
@@ -199,6 +343,8 @@ async def seed_all() -> None:
         created, updated = await seed_problems(db)
         logger.info("Problems seeded: %d created, %d refreshed.", created, updated)
         await seed_demo_project(db, user)
+        await seed_roadmaps(db)
+        await seed_contests(db, user)
 
     logger.info("Database successfully seeded with %d DSA problems.", len(CATALOG))
 

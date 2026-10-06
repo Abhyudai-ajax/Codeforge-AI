@@ -1,5 +1,6 @@
 """Database access for DSA problems and submissions."""
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import String, cast, false, func, select, update
@@ -77,6 +78,20 @@ class ProblemRepository:
         return (
             await self.session.execute(select(Submission).where(Submission.id == submission_id))
         ).scalar_one_or_none()
+
+    async def fail_unfinished_submissions(self, error: str) -> int:
+        """Close out submissions whose judge job can no longer finish. Returns the count."""
+        result = await self.session.execute(
+            update(Submission)
+            .where(Submission.status.in_([SubmissionStatus.QUEUED, SubmissionStatus.RUNNING]))
+            .values(
+                status=SubmissionStatus.FAILED,
+                error_output=error,
+                completed_at=datetime.now(UTC),
+            )
+        )
+        await self.session.commit()
+        return int(getattr(result, "rowcount", 0) or 0)
 
     async def claim_submission(self, submission_id: UUID) -> bool:
         result = await self.session.execute(

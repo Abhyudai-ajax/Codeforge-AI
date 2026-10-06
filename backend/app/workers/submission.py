@@ -8,7 +8,6 @@ import uuid
 
 from sqlalchemy import select
 
-from app.core import languages
 from app.core.database import AsyncSessionLocal
 from app.crud.problem import ProblemRepository
 from app.models.problem import Problem, Submission, SubmissionStatus, TestCase
@@ -27,13 +26,21 @@ def _same_output(actual: str, expected: str) -> bool:
     )
 
 
-def _failure_status(language: str, stderr: str) -> SubmissionStatus:
+def _failure_status(stderr: str, compile_failed: bool) -> SubmissionStatus:
     message = stderr.lower()
-    if "memory" in message or "out of memory" in message:
+    if "memoryerror" in message or "out of memory" in message:
         return SubmissionStatus.MEMORY_LIMIT_EXCEEDED
-    if languages.is_compiled(language):
+    if compile_failed:
         return SubmissionStatus.COMPILATION_ERROR
     return SubmissionStatus.RUNTIME_ERROR
+
+
+def _error_excerpt(stderr: str, limit: int = 4000) -> str:
+    """The tail of the program's stderr, where the actual error message lives."""
+    text = stderr.strip()
+    if not text:
+        return "Program exited with a non-zero status and no error output."
+    return text if len(text) <= limit else "..." + text[-limit:]
 
 
 @celery_app.task(name="codeforge.judge_submission")
@@ -89,8 +96,8 @@ async def _judge(submission_id: str) -> None:
                     safe_error = "Time limit exceeded."
                     break
                 if result.exit_code != 0:
-                    final_status = _failure_status(submission.language, result.stderr)
-                    safe_error = "Program failed in the isolated runner."
+                    final_status = _failure_status(result.stderr, result.compile_failed)
+                    safe_error = _error_excerpt(result.stderr)
                     break
                 if not _same_output(result.stdout, case.expected_output):
                     final_status = SubmissionStatus.WRONG_ANSWER

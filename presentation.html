@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CodeForge AI — Project Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cyan:   #00d4ff;
+    --purple: #8b5cf6;
+    --pink:   #ec4899;
+    --green:  #10b981;
+    --orange: #f59e0b;
+    --bg:     #06071a;
+    --card:   rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --text:   #e2e8f0;
+    --muted:  #94a3b8;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .deck { width: 100vw; height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 48px 72px;
+    opacity: 0; transform: translateX(80px);
+    pointer-events: none;
+    transition: opacity .45s cubic-bezier(.4,0,.2,1), transform .45s cubic-bezier(.4,0,.2,1);
+    overflow: hidden;
+  }
+  .slide.active  { opacity: 1; transform: translateX(0); pointer-events: all; }
+  .slide.exit    { opacity: 0; transform: translateX(-80px); }
+
+  .grid-bg {
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0; pointer-events: none;
+  }
+
+  .orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; animation: drift 8s ease-in-out infinite alternate; }
+  .orb1 { width:500px; height:500px; background:rgba(139,92,246,.18); top:-150px; right:-100px; }
+  .orb2 { width:400px; height:400px; background:rgba(0,212,255,.12); bottom:-100px; left:-80px; animation-delay:3s; }
+  .orb3 { width:300px; height:300px; background:rgba(236,72,153,.10); top:40%; left:40%; animation-delay:1.5s; }
+  @keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(30px,20px) scale(1.05); } }
+
+  .slide > * { position: relative; z-index: 1; }
+
+  .slide-label { font-size: 11px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--cyan); margin-bottom: 12px; opacity: .8; }
+  h1 { font-size: clamp(2.2rem, 4vw, 3.8rem); font-weight: 900; line-height: 1.1; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.6rem); font-weight: 800; line-height: 1.2; }
+  h3 { font-size: 1.1rem; font-weight: 700; }
+
+  .gradient-text { background: linear-gradient(135deg, var(--cyan), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  .subtitle { font-size: clamp(.95rem, 1.5vw, 1.2rem); color: var(--muted); margin-top: 16px; max-width: 680px; line-height: 1.7; text-align: center; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 28px; backdrop-filter: blur(12px); transition: transform .25s, border-color .25s; }
+  .card:hover { transform: translateY(-3px); border-color: rgba(0,212,255,.25); }
+
+  .card-grid { display: grid; gap: 20px; width: 100%; max-width: 1100px; }
+  .card-grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .card-grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .card-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+  .card h3 { color: #fff; margin-bottom: 6px; }
+  .card p  { font-size: .88rem; color: var(--muted); line-height: 1.6; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: .78rem; font-weight: 600; border: 1px solid; }
+  .badge-cyan   { background:rgba(0,212,255,.1);  border-color:rgba(0,212,255,.3);  color:var(--cyan);   }
+  .badge-purple { background:rgba(139,92,246,.1); border-color:rgba(139,92,246,.3); color:var(--purple); }
+  .badge-green  { background:rgba(16,185,129,.1); border-color:rgba(16,185,129,.3); color:var(--green);  }
+  .badge-orange { background:rgba(245,158,11,.1); border-color:rgba(245,158,11,.3); color:var(--orange); }
+  .badge-pink   { background:rgba(236,72,153,.1); border-color:rgba(236,72,153,.3); color:var(--pink);   }
+
+  .tech-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 900px; }
+  .tech-pill { padding: 8px 18px; border-radius: 999px; font-size: .83rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; border: 1px solid var(--border); background: var(--card); backdrop-filter: blur(8px); transition: transform .2s, border-color .2s; }
+  .tech-pill:hover { transform: scale(1.05); border-color: var(--cyan); }
+
+  .compare-table { width: 100%; max-width: 1000px; border-collapse: collapse; font-size: .87rem; }
+  .compare-table th { padding: 12px 20px; text-align: left; background: rgba(0,212,255,.08); border-bottom: 1px solid var(--border); font-size: .78rem; letter-spacing: 1px; text-transform: uppercase; color: var(--cyan); }
+  .compare-table td { padding: 11px 20px; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .compare-table tr:hover td { background: rgba(255,255,255,.02); }
+  .compare-table td:first-child { color: var(--text); font-weight: 600; }
+  .check { color: var(--green); } .cross { color: #ef4444; } .partial { color: var(--orange); }
+
+  .roadmap { display: flex; gap: 0; max-width: 1050px; width: 100%; }
+  .phase { flex: 1; padding: 24px 20px; background: var(--card); border: 1px solid var(--border); backdrop-filter: blur(12px); }
+  .phase:first-child { border-radius: 16px 0 0 16px; }
+  .phase:last-child  { border-radius: 0 16px 16px 0; }
+  .phase + .phase    { border-left: none; }
+  .phase-badge { font-size: .72rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan); margin-bottom: 10px; }
+  .phase h3 { font-size: .95rem; color: #fff; margin-bottom: 12px; }
+  .phase ul { list-style: none; }
+  .phase ul li { font-size: .8rem; color: var(--muted); padding: 4px 0; display: flex; align-items: flex-start; gap: 7px; }
+  .phase ul li::before { content: '→'; color: var(--cyan); flex-shrink: 0; }
+  .phase.done   { border-color: rgba(16,185,129,.3); }
+  .phase.inprog { border-color: rgba(0,212,255,.3);  }
+  .phase.future { border-color: rgba(139,92,246,.3); }
+
+  .feat-list { list-style: none; max-width: 600px; width: 100%; }
+  .feat-list li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .92rem; }
+  .feat-list li:last-child { border-bottom: none; }
+  .feat-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+
+  .stats-row { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+  .stat { text-align: center; }
+  .stat-num { font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 900; background: linear-gradient(135deg, var(--cyan), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; }
+  .stat-label { font-size: .8rem; color: var(--muted); margin-top: 6px; font-weight: 500; }
+
+  .progress-wrap { width: 100%; max-width: 700px; }
+  .progress-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .progress-label { width: 180px; font-size: .84rem; color: var(--text); text-align: right; flex-shrink: 0; }
+  .progress-bar-bg { flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--cyan), var(--purple)); transform: scaleX(0); transform-origin: left; transition: transform 1s cubic-bezier(.4,0,.2,1) .3s; }
+  .slide.active .progress-bar-fill { transform: scaleX(var(--w, 1)); }
+  .progress-pct { width: 38px; font-size: .78rem; font-weight: 700; color: var(--cyan); }
+
+  .section-header { text-align: center; margin-bottom: 32px; }
+
+  .future-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; width: 100%; max-width: 1050px; }
+  .future-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; position: relative; overflow: hidden; }
+  .future-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--cyan), var(--purple)); }
+  .future-card h3 { font-size: .92rem; color: #fff; margin-bottom: 6px; }
+  .future-card p  { font-size: .79rem; color: var(--muted); line-height: 1.55; }
+
+  .nav { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 16px; background: rgba(6,7,26,.8); border: 1px solid var(--border); border-radius: 999px; padding: 10px 24px; backdrop-filter: blur(20px); box-shadow: 0 8px 40px rgba(0,0,0,.4); }
+  .nav-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+  .nav-btn:hover { background: rgba(0,212,255,.15); border-color: var(--cyan); color: var(--cyan); }
+  .nav-dots { display: flex; gap: 7px; }
+  .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); border: 1px solid rgba(255,255,255,.15); cursor: pointer; transition: all .25s; }
+  .nav-dot.active { background: var(--cyan); border-color: var(--cyan); width: 24px; border-radius: 999px; }
+  .slide-num { font-size: .78rem; font-weight: 600; color: var(--muted); min-width: 38px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+
+  #slide-1 { text-align: center; }
+  #slide-1 .tagline-badges { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<div class="deck" id="deck">
+
+  <!-- SLIDE 1 — TITLE -->
+  <section class="slide active" id="slide-1">
+    <div style="font-size:5rem; margin-bottom:20px; filter:drop-shadow(0 0 30px rgba(0,212,255,.5));">⚒️</div>
+    <div class="slide-label">Project Presentation · 2026</div>
+    <h1><span class="gradient-text">CodeForge AI</span></h1>
+    <p class="subtitle">The all-in-one AI-powered platform where developers <strong>learn</strong>, <strong>practice</strong>, <strong>collaborate</strong>, and <strong>get reviewed</strong> — all in one place.</p>
+    <div class="tagline-badges">
+      <span class="badge badge-cyan">🤖 AI-Powered</span>
+      <span class="badge badge-purple">👥 Real-time Collaboration</span>
+      <span class="badge badge-green">⚡ Multi-language Execution</span>
+      <span class="badge badge-orange">🏆 Contests &amp; Leaderboards</span>
+      <span class="badge badge-pink">🔗 GitHub Integration</span>
+    </div>
+  </section>
+
+  <!-- SLIDE 2 — WHAT IS IT -->
+  <section class="slide" id="slide-2">
+    <div class="section-header">
+      <div class="slide-label">Overview</div>
+      <h2>What is <span class="gradient-text">CodeForge AI</span>?</h2>
+    </div>
+    <p class="subtitle" style="margin-bottom:32px; text-align:center;">A production-grade SaaS platform that fuses the best parts of today's leading developer tools into a single unified experience.</p>
+    <div class="card-grid card-grid-4">
+      <div class="card">
+        <span class="icon">📚</span>
+        <h3>Problem Solving</h3>
+        <p>LeetCode-style DSA challenges with 50 curated problems across 19 topics and all 3 difficulty levels.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🤖</span>
+        <h3>AI Assistance</h3>
+        <p>Context-aware hints, code explanations, reviews &amp; debug help — grounded in the actual problem statement.</p>
+      </div>
+      <div class="card">
+        <span class="icon">👥</span>
+        <h3>Real-time Collab</h3>
+        <p>Replit-style multiplayer coding rooms over WebSockets — pair program and mock interview together, live.</p>
+      </div>
+      <div class="card">
+        <span class="icon">⚡</span>
+        <h3>Instant Execution</h3>
+        <p>Sandboxed runner for Python, C, C++, JavaScript &amp; Java with per-problem time &amp; memory limits.</p>
+      </div>
+    </div>
+    <div style="margin-top:24px; text-align:center; font-size:.9rem; color:var(--muted);">
+      <strong style="color:var(--text);">One platform</strong> that replaces LeetCode + GitHub Copilot + Replit + CodeSandbox
+    </div>
+  </section>
+
+  <!-- SLIDE 3 — THE PROBLEM -->
+  <section class="slide" id="slide-3">
+    <div class="section-header">
+      <div class="slide-label">Problem Statement</div>
+      <h2>The Problem We <span class="gradient-text">Solve</span></h2>
+    </div>
+    <div class="card-grid card-grid-2" style="max-width:900px; margin-bottom:28px;">
+      <div class="card" style="border-color:rgba(239,68,68,.25);">
+        <h3 style="color:#fca5a5;">😩 Current Pain Points</h3>
+        <ul style="list-style:none; margin-top:12px;">
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">❌ Switch between 4–5 tools to learn &amp; practice</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">❌ No context-aware AI help on specific DSA problems</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">❌ No real-time collaboration on coding challenges</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">❌ No unified progress tracking + roadmaps</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">❌ Fragmented GitHub PR review + code practice</li>
+        </ul>
+      </div>
+      <div class="card" style="border-color:rgba(16,185,129,.25);">
+        <h3 style="color:#6ee7b7;">✅ Our Solution</h3>
+        <ul style="list-style:none; margin-top:12px;">
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">✅ Single unified platform — login once, do everything</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">✅ AI grounded in the actual problem statement &amp; constraints</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">✅ Live multiplayer coding rooms via WebSockets</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">✅ Structured learning roadmaps + per-user progress</li>
+          <li style="color:var(--muted); font-size:.88rem; padding:5px 0;">✅ GitHub OAuth + AI-powered PR review built in</li>
+        </ul>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-num">50+</div><div class="stat-label">DSA Problems</div></div>
+      <div class="stat"><div class="stat-num">19</div><div class="stat-label">Topic Categories</div></div>
+      <div class="stat"><div class="stat-num">5</div><div class="stat-label">Languages Supported</div></div>
+      <div class="stat"><div class="stat-num">1</div><div class="stat-label">Platform for Everything</div></div>
+    </div>
+  </section>
+
+  <!-- SLIDE 4 — COMPARISON -->
+  <section class="slide" id="slide-4">
+    <div class="section-header">
+      <div class="slide-label">Competitive Analysis</div>
+      <h2>How We're <span class="gradient-text">Different</span></h2>
+    </div>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>LeetCode</th>
+          <th>Replit</th>
+          <th>GitHub Copilot</th>
+          <th style="background:rgba(0,212,255,.15); color:#fff;">CodeForge AI ✨</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>DSA Problem Catalog</td><td><span class="check">✔</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>Context-aware AI Hints</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="partial">⚡ Generic</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔ Problem-grounded</span></td></tr>
+        <tr><td>Real-time Collaboration</td><td><span class="cross">✗</span></td><td><span class="check">✔</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>Multi-language Sandbox</td><td><span class="check">✔</span></td><td><span class="check">✔</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>Contests &amp; Leaderboards</td><td><span class="check">✔</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>Structured Learning Roadmaps</td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>GitHub Integration + AI PR Review</td><td><span class="cross">✗</span></td><td><span class="partial">⚡ Basic</span></td><td><span class="check">✔</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+        <tr><td>AI Mock Interviews</td><td><span class="partial">⚡ Paid</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td><td style="background:rgba(0,212,255,.05);"><span class="check">✔</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SLIDE 5 — TECH STACK -->
+  <section class="slide" id="slide-5">
+    <div class="section-header">
+      <div class="slide-label">Technology</div>
+      <h2>The <span class="gradient-text">Tech Stack</span></h2>
+    </div>
+    <div class="card-grid card-grid-3" style="max-width:1000px; margin-bottom:28px;">
+      <div class="card" style="border-color:rgba(0,212,255,.2);">
+        <span class="icon">🖥️</span>
+        <h3 style="color:var(--cyan);">Frontend</h3>
+        <p>Next.js 15 · TypeScript 5.3 · Tailwind CSS · Zustand · TanStack Query · Socket.io Client · Axios</p>
+      </div>
+      <div class="card" style="border-color:rgba(139,92,246,.2);">
+        <span class="icon">⚙️</span>
+        <h3 style="color:var(--purple);">Backend</h3>
+        <p>FastAPI · Python 3.12 · SQLAlchemy 2.0 · PostgreSQL 16 · Redis 7 · Celery · Alembic · Pydantic v2</p>
+      </div>
+      <div class="card" style="border-color:rgba(16,185,129,.2);">
+        <span class="icon">🔧</span>
+        <h3 style="color:var(--green);">Infrastructure</h3>
+        <p>GitHub Actions CI/CD · Docker sandbox runners · JWT Auth · WebSocket rooms · OpenAI / Ollama AI</p>
+      </div>
+    </div>
+    <div class="tech-grid">
+      <span class="tech-pill" style="color:var(--cyan);">Next.js 15</span>
+      <span class="tech-pill" style="color:#3178c6;">TypeScript</span>
+      <span class="tech-pill" style="color:#38bdf8;">Tailwind CSS</span>
+      <span class="tech-pill" style="color:#f7931e;">FastAPI</span>
+      <span class="tech-pill" style="color:#3776ab;">Python 3.12</span>
+      <span class="tech-pill" style="color:#336791;">PostgreSQL</span>
+      <span class="tech-pill" style="color:#dc382d;">Redis</span>
+      <span class="tech-pill" style="color:#37b24d;">Celery</span>
+      <span class="tech-pill" style="color:var(--purple);">WebSockets</span>
+      <span class="tech-pill" style="color:var(--orange);">OpenAI / Ollama</span>
+      <span class="tech-pill" style="color:#2496ed;">Docker</span>
+      <span class="tech-pill" style="color:#aaa;">GitHub Actions</span>
+    </div>
+  </section>
+
+  <!-- SLIDE 6 — ARCHITECTURE -->
+  <section class="slide" id="slide-6">
+    <div class="section-header">
+      <div class="slide-label">System Design</div>
+      <h2>Platform <span class="gradient-text">Architecture</span></h2>
+    </div>
+    <div style="display:flex; gap:40px; align-items:flex-start; width:100%; max-width:1050px;">
+      <div style="flex:1;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="text-align:center; padding:14px 24px; border-radius:12px; background:rgba(0,212,255,.12); border:1px solid rgba(0,212,255,.3); font-size:.9rem; font-weight:700; color:var(--cyan);">🖥️ Next.js Frontend (Port 3000)</div>
+          <div style="text-align:center; color:var(--muted); font-size:1.3rem;">↕ REST + WebSocket</div>
+          <div style="text-align:center; padding:14px 24px; border-radius:12px; background:rgba(139,92,246,.12); border:1px solid rgba(139,92,246,.3); font-size:.9rem; font-weight:700; color:var(--purple);">⚙️ FastAPI Backend (Port 8000) · 18 API Modules</div>
+          <div style="display:flex; justify-content:center; gap:8px; color:var(--muted); font-size:1rem; margin:4px 0;"><span>↙</span><span>↓</span><span>↘</span></div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">
+            <div style="text-align:center; padding:10px; border-radius:10px; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); font-size:.78rem; font-weight:600; color:var(--green);">🗄️ PostgreSQL 16</div>
+            <div style="text-align:center; padding:10px; border-radius:10px; background:rgba(220,56,50,.1); border:1px solid rgba(220,56,50,.25); font-size:.78rem; font-weight:600; color:#f87171;">⚡ Redis Cache</div>
+            <div style="text-align:center; padding:10px; border-radius:10px; background:rgba(36,150,237,.1); border:1px solid rgba(36,150,237,.25); font-size:.78rem; font-weight:600; color:#60a5fa;">🐳 Docker Sandbox</div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:4px;">
+            <div style="text-align:center; padding:10px; border-radius:10px; background:rgba(0,212,255,.07); border:1px solid var(--border); font-size:.78rem; font-weight:600; color:var(--muted);">🤖 AI Provider<br/><span style="font-size:.72rem;">OpenAI / Ollama</span></div>
+            <div style="text-align:center; padding:10px; border-radius:10px; background:rgba(0,212,255,.07); border:1px solid var(--border); font-size:.78rem; font-weight:600; color:var(--muted);">📡 WebSocket Rooms<br/><span style="font-size:.72rem;">Live Collab</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+        <h3 style="color:var(--text); font-size:.95rem; margin-bottom:4px;">Clean Architecture Layers</h3>
+        <div class="card" style="padding:12px 16px;"><div style="font-size:.82rem; color:var(--cyan); font-weight:700; margin-bottom:3px;">API Layer</div><div style="font-size:.77rem; color:var(--muted);">18 FastAPI routers: auth, problems, contests, AI, GitHub, WebSockets, notifications, roadmaps…</div></div>
+        <div class="card" style="padding:12px 16px;"><div style="font-size:.82rem; color:var(--purple); font-weight:700; margin-bottom:3px;">Services Layer</div><div style="font-size:.77rem; color:var(--muted);">16 services: AuthService, ContestService, ProblemAIService, RoadmapService, InterviewService, GitHubOAuthService…</div></div>
+        <div class="card" style="padding:12px 16px;"><div style="font-size:.82rem; color:var(--green); font-weight:700; margin-bottom:3px;">Data Access Layer</div><div style="font-size:.77rem; color:var(--muted);">CRUD Repositories — SQLAlchemy 2.0 async ORM + Redis for hot data caching</div></div>
+        <div class="card" style="padding:12px 16px;"><div style="font-size:.82rem; color:var(--orange); font-weight:700; margin-bottom:3px;">Workers Layer</div><div style="font-size:.77rem; color:var(--muted);">Celery async tasks — code judging, notification dispatch, execution orchestration</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 7 — PROTOTYPE -->
+  <section class="slide" id="slide-7">
+    <div class="section-header">
+      <div class="slide-label">Current Status</div>
+      <h2>What's in the <span class="gradient-text">Prototype</span> Now</h2>
+    </div>
+    <div style="display:flex; gap:40px; width:100%; max-width:1050px; align-items:flex-start;">
+      <div style="flex:1;">
+        <h3 style="color:var(--green); margin-bottom:14px; font-size:.85rem; letter-spacing:1px; text-transform:uppercase;">✅ Backend — Fully Implemented</h3>
+        <ul class="feat-list">
+          <li><span class="feat-icon">🔐</span><div><strong>JWT + GitHub OAuth</strong><br/><span style="font-size:.8rem; color:var(--muted);">Register, login, token refresh, role-based admin</span></div></li>
+          <li><span class="feat-icon">📚</span><div><strong>50-Problem Catalog</strong><br/><span style="font-size:.8rem; color:var(--muted);">3 difficulty levels, 19 topics, per-language starter code</span></div></li>
+          <li><span class="feat-icon">⚡</span><div><strong>Code Execution Engine</strong><br/><span style="font-size:.8rem; color:var(--muted);">Python, C, C++, JS, Java — Docker-isolated sandbox</span></div></li>
+          <li><span class="feat-icon">🤖</span><div><strong>AI Services</strong><br/><span style="font-size:.8rem; color:var(--muted);">Hint, explain, review, debug, test-gen — problem-grounded</span></div></li>
+          <li><span class="feat-icon">🏆</span><div><strong>Contests &amp; Leaderboards</strong><br/><span style="font-size:.8rem; color:var(--muted);">Time-scored, ranked, participant history</span></div></li>
+          <li><span class="feat-icon">🗺️</span><div><strong>Roadmaps &amp; Progress</strong><br/><span style="font-size:.8rem; color:var(--muted);">Structured paths with per-user tracking</span></div></li>
+          <li><span class="feat-icon">👥</span><div><strong>Collab Rooms + Interviews</strong><br/><span style="font-size:.8rem; color:var(--muted);">WebSocket rooms + AI mock interview sessions</span></div></li>
+        </ul>
+      </div>
+      <div style="flex:1;">
+        <h3 style="color:var(--orange); margin-bottom:14px; font-size:.85rem; letter-spacing:1px; text-transform:uppercase;">🔄 Frontend — In Progress</h3>
+        <ul class="feat-list" style="margin-bottom:20px;">
+          <li><span class="feat-icon">🖥️</span><div><strong>Pages Scaffolded</strong><br/><span style="font-size:.8rem; color:var(--muted);">Problems, Contests, Leaderboard, Rooms, Interviews, Submissions, Roadmaps, GitHub, AI Assistant</span></div></li>
+          <li><span class="feat-icon">🎨</span><div><strong>Dark UI Components</strong><br/><span style="font-size:.8rem; color:var(--muted);">Badges, stats, tabs, avatars, rank cards, editor panel</span></div></li>
+          <li><span class="feat-icon">🔌</span><div><strong>API Integration Layer</strong><br/><span style="font-size:.8rem; color:var(--muted);">Axios client, React Query hooks, Zustand state</span></div></li>
+        </ul>
+        <div class="progress-wrap">
+          <div class="progress-row"><span class="progress-label">Backend API</span><div class="progress-bar-bg"><div class="progress-bar-fill" style="--w:0.95"></div></div><span class="progress-pct">95%</span></div>
+          <div class="progress-row"><span class="progress-label">Database Models</span><div class="progress-bar-bg"><div class="progress-bar-fill" style="--w:1.0"></div></div><span class="progress-pct">100%</span></div>
+          <div class="progress-row"><span class="progress-label">AI Services</span><div class="progress-bar-bg"><div class="progress-bar-fill" style="--w:0.90"></div></div><span class="progress-pct">90%</span></div>
+          <div class="progress-row"><span class="progress-label">Frontend UI</span><div class="progress-bar-bg"><div class="progress-bar-fill" style="--w:0.55"></div></div><span class="progress-pct">55%</span></div>
+          <div class="progress-row"><span class="progress-label">Test Coverage</span><div class="progress-bar-bg"><div class="progress-bar-fill" style="--w:0.70"></div></div><span class="progress-pct">70%</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 8 — KEY FEATURES -->
+  <section class="slide" id="slide-8">
+    <div class="section-header">
+      <div class="slide-label">Feature Spotlight</div>
+      <h2>Key Features <span class="gradient-text">Deep Dive</span></h2>
+    </div>
+    <div class="card-grid card-grid-3" style="max-width:1060px;">
+      <div class="card">
+        <span class="icon">🤖</span>
+        <h3>Problem-grounded AI</h3>
+        <p>AI reads the problem statement, constraints, and current code before generating hints or code reviews — not generic completions.</p>
+        <div style="margin-top:10px;"><span class="badge badge-cyan">hint · explain · review · debug</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">🏆</span>
+        <h3>Scoring Contests</h3>
+        <p>Time-based scoring with registration, real-time leaderboards, penalty management, and full user submission history.</p>
+        <div style="margin-top:10px;"><span class="badge badge-orange">Live Ranked Contests</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">👥</span>
+        <h3>WebSocket Rooms</h3>
+        <p>Real-time collaborative coding sessions — great for pair programming, study groups, and live mock interviews.</p>
+        <div style="margin-top:10px;"><span class="badge badge-purple">Live · Multi-user</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">🗺️</span>
+        <h3>Learning Roadmaps</h3>
+        <p>Structured DSA learning paths with milestones, curated problem lists per topic, and per-user completion tracking.</p>
+        <div style="margin-top:10px;"><span class="badge badge-green">Structured Learning</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">🔗</span>
+        <h3>GitHub Integration</h3>
+        <p>OAuth 2.0 login via GitHub. Link repos and get AI-powered pull request review — bridging practice and real-world development.</p>
+        <div style="margin-top:10px;"><span class="badge badge-pink">OAuth · AI PR Review</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">🧠</span>
+        <h3>AI Mock Interviews</h3>
+        <p>Structured sessions with AI-generated follow-up questions, real-time feedback and scoring — simulates real technical interviews.</p>
+        <div style="margin-top:10px;"><span class="badge badge-purple">Interview Prep</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 9 — ROADMAP -->
+  <section class="slide" id="slide-9">
+    <div class="section-header">
+      <div class="slide-label">Roadmap</div>
+      <h2>What We're <span class="gradient-text">Building Next</span></h2>
+    </div>
+    <div class="roadmap" style="margin-bottom:24px;">
+      <div class="phase done">
+        <div class="phase-badge" style="color:var(--green);">✅ Phase 1 — Done</div>
+        <h3>MVP Backend</h3>
+        <ul>
+          <li>User auth &amp; profiles</li>
+          <li>50-problem catalog</li>
+          <li>Multi-language execution</li>
+          <li>Real-time rooms</li>
+          <li>AI hint / explain / review</li>
+          <li>Contests &amp; leaderboards</li>
+          <li>GitHub OAuth &amp; PR review</li>
+        </ul>
+      </div>
+      <div class="phase inprog">
+        <div class="phase-badge" style="color:var(--cyan);">🔄 Phase 2 — Active</div>
+        <h3>Frontend Integration</h3>
+        <ul>
+          <li>Full editor UI wiring</li>
+          <li>Submission results view</li>
+          <li>Live leaderboard UI</li>
+          <li>Roadmap dashboard</li>
+          <li>User portfolios</li>
+          <li>Notification center</li>
+        </ul>
+      </div>
+      <div class="phase future">
+        <div class="phase-badge" style="color:var(--purple);">🚀 Phase 3 — Planned</div>
+        <h3>Advanced &amp; Enterprise</h3>
+        <ul>
+          <li>Personalized ML recommendations</li>
+          <li>Enterprise hiring portal</li>
+          <li>Team &amp; company accounts</li>
+          <li>Video interview rooms</li>
+          <li>Performance analytics</li>
+          <li>Mobile apps</li>
+        </ul>
+      </div>
+    </div>
+    <div class="future-grid">
+      <div class="future-card">
+        <h3>🧬 Personalized AI</h3>
+        <p>ML model that adapts problem difficulty and topic recommendations based on individual performance patterns.</p>
+      </div>
+      <div class="future-card">
+        <h3>🏢 Enterprise Hiring</h3>
+        <p>Company accounts, custom problem sets, candidate assessment pipelines, and ATS integration.</p>
+      </div>
+      <div class="future-card">
+        <h3>📹 Video Interviews</h3>
+        <p>Integrated video rooms with live collaborative coding, AI transcription, and automated feedback reports.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SLIDE 10 — CLOSING -->
+  <section class="slide" id="slide-10">
+    <div class="section-header">
+      <div class="slide-label">Thank You</div>
+      <h2 style="text-align:center;"><span class="gradient-text">CodeForge AI</span></h2>
+      <p class="subtitle">Built by developers, for developers. One platform to learn, practice, collaborate, and grow.</p>
+    </div>
+    <div class="card-grid card-grid-4" style="max-width:1000px; margin:0 auto 28px;">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">📚</div>
+        <div style="font-size:.85rem; font-weight:700; color:var(--cyan);">Practice</div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:4px;">50 DSA problems · 19 topics</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">🤖</div>
+        <div style="font-size:.85rem; font-weight:700; color:var(--purple);">AI Help</div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:4px;">Grounded hints &amp; reviews</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">👥</div>
+        <div style="font-size:.85rem; font-weight:700; color:var(--green);">Collaborate</div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:4px;">Live rooms &amp; mock interviews</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:8px;">🚀</div>
+        <div style="font-size:.85rem; font-weight:700; color:var(--orange);">Grow</div>
+        <div style="font-size:.78rem; color:var(--muted); margin-top:4px;">Roadmaps, contests &amp; tracking</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-bottom:28px;">
+      <div class="card" style="padding:14px 24px; text-align:center; min-width:200px;">
+        <div style="font-size:.75rem; color:var(--muted); margin-bottom:4px;">Backend API Docs</div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:.85rem; color:var(--cyan);">localhost:8000/api/docs</div>
+      </div>
+      <div class="card" style="padding:14px 24px; text-align:center; min-width:200px;">
+        <div style="font-size:.75rem; color:var(--muted); margin-bottom:4px;">Frontend App</div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:.85rem; color:var(--purple);">localhost:3000</div>
+      </div>
+      <div class="card" style="padding:14px 24px; text-align:center; min-width:200px;">
+        <div style="font-size:.75rem; color:var(--muted); margin-bottom:4px;">License</div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:.85rem; color:var(--green);">MIT Open Source</div>
+      </div>
+    </div>
+    <div style="text-align:center; font-size:1.5rem; font-weight:800; background:linear-gradient(135deg,var(--cyan),var(--purple),var(--pink)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">
+      "Built by developers, for developers." ✨
+    </div>
+  </section>
+
+</div><!-- /deck -->
+
+<nav class="nav" id="nav">
+  <button class="nav-btn" id="prev-btn">‹</button>
+  <div class="nav-dots" id="dots"></div>
+  <button class="nav-btn" id="next-btn">›</button>
+  <span class="slide-num" id="slide-num">01 / 10</span>
+</nav>
+
+<script>
+  const TOTAL = 10;
+  let current = 1;
+
+  const dotsEl   = document.getElementById('dots');
+  const slideNum = document.getElementById('slide-num');
+
+  for (let i = 1; i <= TOTAL; i++) {
+    const d = document.createElement('span');
+    d.className = 'nav-dot' + (i === 1 ? ' active' : '');
+    d.dataset.slide = i;
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  }
+
+  function goTo(n) {
+    if (n < 1 || n > TOTAL || n === current) return;
+    const prev = document.getElementById('slide-' + current);
+    prev.classList.remove('active');
+    prev.classList.add('exit');
+    setTimeout(() => prev.classList.remove('exit'), 500);
+    current = n;
+    document.getElementById('slide-' + current).classList.add('active');
+    document.querySelectorAll('.nav-dot').forEach((d, i) => d.classList.toggle('active', i + 1 === current));
+    slideNum.textContent = String(current).padStart(2,'0') + ' / ' + String(TOTAL).padStart(2,'0');
+  }
+
+  document.getElementById('prev-btn').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('next-btn').addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))        { e.preventDefault(); goTo(current - 1); }
+  });
+
+  let tx = 0;
+  document.addEventListener('touchstart', e => tx = e.changedTouches[0].clientX, { passive: true });
+  document.addEventListener('touchend',   e => { const dx = tx - e.changedTouches[0].clientX; if (Math.abs(dx) > 50) goTo(dx > 0 ? current + 1 : current - 1); });
+</script>
+</body>
+</html>
